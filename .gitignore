@@ -1,0 +1,16 @@
+# Escludi cartelle di compilazione
+bin/
+obj/
+.vs/
+
+# Escludi pacchetti NuGet scaricati
+packages/
+
+# Escludi file di configurazione dell'IDE
+*.user
+*.suo
+*.vscode/
+
+# Escludi i log e file temporanei
+*.log
+*.tmp
