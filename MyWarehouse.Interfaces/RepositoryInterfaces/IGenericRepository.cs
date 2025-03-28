@@ -1,4 +1,6 @@
-﻿namespace MyWarehouse.Interfaces.RepositoryInterfaces;
+﻿using MyWarehouse.Data.Models;
+
+namespace MyWarehouse.Interfaces.RepositoryInterfaces;
 
 public interface IGenericRepository<T> where T : class
 {

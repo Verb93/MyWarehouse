@@ -15,7 +15,7 @@ public class GenericRepository<T> : IGenericRepository<T> where T : class
         _dbSet = _context.Set<T>();
     }
 
-    public virtual IQueryable<T> GetAll()
+    public IQueryable<T> GetAll()
     {
         return _dbSet.AsQueryable();
     }

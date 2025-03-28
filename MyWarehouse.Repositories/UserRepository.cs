@@ -15,4 +15,12 @@ public class UserRepository : GenericRepository<Users>, IUserRepository
     {
         return await _dbSet.SingleOrDefaultAsync(x => x.Email == email);
     }
+
+    public IQueryable<Users> GetAllWithRoles()
+    {
+        return _dbSet
+            .Include(u => u.Role)
+            .Where(u => !u.IsDeleted);
+    }
+
 }

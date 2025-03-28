@@ -2,6 +2,7 @@
 using MyWarehouse.Common.DTOs.Users;
 using MyWarehouse.Common.Response;
 using MyWarehouse.Interfaces.ServiceInterfaces;
+using System.Security.Claims;
 
 namespace MyWarehouse.WEB.Controllers;
 
@@ -27,9 +28,9 @@ public class UserController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetUserById(int id)
     {
-        var sessionUserId = HttpContext.Session.GetString("UserId");
+        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (string.IsNullOrEmpty(sessionUserId) || sessionUserId != id.ToString())
+        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
         {
             return Unauthorized(new { message = "Non autorizzato ad accedere a questi dati" });
         }
@@ -64,29 +65,18 @@ public class UserController : ControllerBase
     public async Task<IActionResult> Login([FromBody] LoginDTO loginDto)
     {
         IActionResult result;
-        ResponseBase<bool> response;
+        ResponseBase<string> response;
 
         if (loginDto == null)
         {
-            response = ResponseBase<bool>.Fail("Dati non validi", ErrorCode.ValidationError);
-            result = BadRequest(response);
+            response = ResponseBase<string>.Fail("Dati non validi", ErrorCode.ValidationError);
+            result = BadRequest(new { message = response.ErrorMessage });
         }
         else
         {
-            response = await _userService.AuthenticateUserAsync(loginDto, HttpContext);
-            result = response.Result ? Ok(new { message = "Login effettuato con successo" }) : Unauthorized(response.ErrorMessage);
+            response = await _userService.AuthenticateUserAsync(loginDto);
+            result = response.Result ? Ok(new { message = "Login effettuato con successo", token = response.Data }) : Unauthorized(new { message = response.ErrorMessage });
         }
-
-        return result;
-    }
-
-    [HttpPost("logout")]
-    public IActionResult Logout()
-    {
-        IActionResult result;
-        var response = _userService.LogOut(HttpContext);
-
-        result = response.Result ? Ok(new { message = "Logout effettuato con successo" }) : BadRequest(response.ErrorMessage);
 
         return result;
     }
@@ -99,9 +89,9 @@ public class UserController : ControllerBase
         IActionResult result;
         ResponseBase<UserDTO> response;
 
-        var sessionUserId = HttpContext.Session.GetString("UserId");
+        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (string.IsNullOrEmpty(sessionUserId) || sessionUserId != id.ToString())
+        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
         {
             result = Unauthorized(new { message = "Non puoi modificare i dati di un altro utente" });
         }
@@ -120,9 +110,9 @@ public class UserController : ControllerBase
         IActionResult result;
         ResponseBase<bool> response;
 
-        var sessionUserId = HttpContext.Session.GetString("UserId");
+        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (string.IsNullOrEmpty(sessionUserId) || sessionUserId != id.ToString())
+        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
         {
             result = Unauthorized(new { message = "Non puoi modificare la password di un altro utente" });
         }
@@ -143,9 +133,9 @@ public class UserController : ControllerBase
         IActionResult result;
         ResponseBase<bool> response;
 
-        var sessionUserId = HttpContext.Session.GetString("UserId");
+        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (string.IsNullOrEmpty(sessionUserId) || sessionUserId != id.ToString())
+        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
         {
             result = Unauthorized(new { message = "Non puoi eliminare un altro utente" });
         }

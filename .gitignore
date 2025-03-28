@@ -14,3 +14,8 @@ packages/
 # Escludi i log e file temporanei
 *.log
 *.tmp
+
+# Escludi file di configurazione sensibili
+MyWarehouse.WEB/appsettings.json
+MyWarehouse.WEB/appsettings.Development.json
+MyWarehouse.WEB/Properties/launchSettings.json

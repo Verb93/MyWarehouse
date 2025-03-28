@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using MyWarehouse.Common.DTOs.Users;
 using MyWarehouse.Common.Response;
 using MyWarehouse.Common.Security.SecurityInterface;
@@ -14,16 +15,52 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
     private readonly IMapper _mapper;
     private readonly IUserRepository _repository;
     private readonly IPasswordService<Users> _passwordService;
-    public UserService(IUserRepository repository, IMapper mapper, IPasswordService<Users> passwordService) : base(repository, mapper)
+    private readonly ISupplierUserRepository _supplierUserRepository;
+    private readonly IJwtService _jwtService;
+    public UserService(
+        IUserRepository repository, 
+        IMapper mapper,
+        IPasswordService<Users> passwordService,
+        ISupplierUserRepository supplierUserRepository,
+        IJwtService jwtService
+        ) : base(repository, mapper)
     {
         _mapper = mapper;
         _repository = repository;
         _passwordService = passwordService;
+        _supplierUserRepository = supplierUserRepository;
+        _jwtService = jwtService;
+    }
+
+    public override async Task<IEnumerable<UserDTO>> GetAllAsync()
+    {
+        var users = await _repository.GetAllWithRoles().ToListAsync();
+        return _mapper.Map<IEnumerable<UserDTO>>(users);
+    }
+
+    public override async Task<ResponseBase<UserDTO>> GetByIdAsync(int id)
+    {
+        var response = new ResponseBase<UserDTO>();
+
+        var user = await _repository.GetAllWithRoles()
+            .FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
+
+        if (user == null)
+        {
+            response = ResponseBase<UserDTO>.Fail("Utente non trovato", ErrorCode.NotFound);
+        }
+        else
+        {
+            response = ResponseBase<UserDTO>.Success(_mapper.Map<UserDTO>(user));
+        }
+
+        return response;
     }
 
     //registra un nuovo utente
     //controllando se l'emai è già registrata
     //hash della password prima di salvarla
+    // e gestione del ruolo
     public async Task<ResponseBase<UserDTO>> RegisterUserAsync(RegisterDTO registerDTO)
     {
         var response = new ResponseBase<UserDTO>();
@@ -44,8 +81,18 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
                 user.PasswordHash = _passwordService.HashPassword(user, registerDTO.Password);
                 user.CreatedAt = DateTime.UtcNow;
                 user.IsDeleted = false;
+                user.IdRole = registerDTO.IdRole;
 
-                var createdUser = await _repository.AddAsync(user);
+                await _repository.AddAsync(user);
+
+                if (user.IdRole == 3 && registerDTO.IdSupplier.HasValue)
+                {
+                    await _supplierUserRepository.AddSupplierUserAsync(user.Id, registerDTO.IdSupplier.Value);
+                }
+
+                var createdUser = await _repository.GetAllWithRoles()
+                    .FirstOrDefaultAsync(u => u.Id == user.Id);
+
                 response = ResponseBase<UserDTO>.Success(_mapper.Map<UserDTO>(createdUser));
             }
         }
@@ -58,49 +105,33 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
 
     //cerca l'utente
     //controlla la password
-    public async Task<ResponseBase<bool>> AuthenticateUserAsync(LoginDTO loginDTO, HttpContext httpContext)
+    //genera il jwt
+    public async Task<ResponseBase<string>> AuthenticateUserAsync(LoginDTO loginDTO)
     {
-        var response = new ResponseBase<bool>();
+        var response = new ResponseBase<string>();
+
         try
         {
-            var user = await _repository.GetByEmailAsync(loginDTO.Email);
+            var user = await _repository.GetAllWithRoles()
+                .FirstOrDefaultAsync(u => u.Email == loginDTO.Email && !u.IsDeleted);
 
-            if (user == null)
+            if (user == null || string.IsNullOrEmpty(user.PasswordHash) ||
+                !_passwordService.VerifyPassword(user, user.PasswordHash, loginDTO.Password))
             {
-                response = ResponseBase<bool>.Fail("Email o password non valide", ErrorCode.ValidationError);
-            }
-            else if (string.IsNullOrEmpty(user.PasswordHash) || !_passwordService.VerifyPassword(user, user.PasswordHash, loginDTO.Password))
-            {
-                response = ResponseBase<bool>.Fail("Email o password non valide", ErrorCode.ValidationError);
+                response = ResponseBase<string>.Fail("Email o password non valide", ErrorCode.ValidationError);
             }
             else
             {
-                httpContext.Session.SetString("UserId", user.Id.ToString());
-                httpContext.Session.SetString("UserEmail", user.Email);
-
-                response = ResponseBase<bool>.Success(true);
+                var userDto = _mapper.Map<UserDTO>(user);
+                var token = _jwtService.GenerateJwtToken(userDto);
+                response = ResponseBase<string>.Success(token);
             }
-        }
-        catch (Exception ex) 
-        {
-            response = ResponseBase<bool>.Fail($"errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
-
-        }
-        return response;
-    }
-
-    public ResponseBase<bool> LogOut(HttpContext httpContext)
-    {
-        var response = new ResponseBase<bool>();
-        try
-        {
-            httpContext.Session.Clear();
-            response = ResponseBase<bool>.Success(true);
         }
         catch (Exception ex)
         {
-            response = ResponseBase<bool>.Fail($"errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
+            response = ResponseBase<string>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
         }
+
         return response;
     }
 
