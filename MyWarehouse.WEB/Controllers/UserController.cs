@@ -32,7 +32,7 @@ public class UserController : ControllerBase
     {
         var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (userIdFromToken != id.ToString())
+        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
         {
             return Unauthorized(new { message = "Non autorizzato ad accedere a questi dati" });
         }
@@ -48,7 +48,9 @@ public class UserController : ControllerBase
     {
         var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (userIdFromToken != id.ToString())
+        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
         {
             return Unauthorized(new { message = "Non puoi modificare i dati di un altro utente" });
         }
@@ -62,7 +64,13 @@ public class UserController : ControllerBase
     {
         var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (userIdFromToken != id.ToString())
+        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
+        {
+            result = Unauthorized(new { message = "Non puoi modificare la password di un altro utente" });
+        }
+        else
         {
             return Unauthorized(new { message = "Non puoi modificare la password di un altro utente" });
         }
@@ -76,9 +84,16 @@ public class UserController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteUser(int id)
     {
+        IActionResult result;
+        ResponseBase<bool> response;
+
         var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (userIdFromToken != id.ToString())
+        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
+        {
+            result = Unauthorized(new { message = "Non puoi eliminare un altro utente" });
+        }
+        else
         {
             return Unauthorized(new { message = "Non puoi eliminare un altro utente" });
         }
