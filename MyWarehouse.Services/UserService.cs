@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MyWarehouse.Common.DTOs.Users;
 using MyWarehouse.Common.Response;
-using MyWarehouse.Common.Security;
 using MyWarehouse.Common.Security.SecurityInterface;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
@@ -16,10 +15,14 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
     private readonly IMapper _mapper;
     private readonly IUserRepository _repository;
     private readonly IPasswordService<Users> _passwordService;
+    private readonly ISupplierUserRepository _supplierUserRepository;
+    private readonly IJwtService _jwtService;
     public UserService(
         IUserRepository repository, 
         IMapper mapper, 
-        IPasswordService<Users> passwordService
+        IPasswordService<Users> passwordService,
+        ISupplierUserRepository supplierUserRepository,
+        IJwtService jwtService
         ) : base(repository, mapper)
     {
         _mapper = mapper;
@@ -100,9 +103,6 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
             response = ResponseBase<bool>.Fail($"errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
 
         }
-        return response;
-    }
-
         return response;
     }
 
