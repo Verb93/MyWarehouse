@@ -9,5 +9,6 @@ namespace MyWarehouse.Interfaces.RepositoryInterfaces;
 
 public interface IUserRepository : IGenericRepository<Users>
 {
+    IQueryable<Users> GetAllWithRoles();
     Task<Users?> GetByEmailAsync(string email);
 }

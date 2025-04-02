@@ -23,10 +23,20 @@ public class SupplierRepository : GenericRepository<Suppliers>, ISupplierReposit
     {
         return _context.Products.Where(p => p.IdSupplier == supplierId).AsQueryable();
     }
-
     public IQueryable<Suppliers> GetSuppliersByCity(int cityId)
     {
         return _context.Suppliers.Where(s => s.IdCity == cityId).AsQueryable();
     }
+    public IQueryable<Suppliers> GetAllWithCity()
+    {
+        return _dbSet.Include(s => s.City);
+    }
+
+    public Task<Suppliers?> GetByIdWithCityAsync(int id)
+    {
+        return _dbSet.Include(s => s.City)
+                     .FirstOrDefaultAsync(s => s.Id == id);
+    }
+
 
 }

@@ -1,7 +1,9 @@
 ﻿using AutoMapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
+using MyWarehouse.Common.Security;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
 using MyWarehouse.Interfaces.ServiceInterfaces;
@@ -13,30 +15,26 @@ public class ProductService : GenericService<Products, ProductDTO>, IProductServ
     private readonly IProductRepository _repository;
     private readonly IMapper _mapper;
 
-    public ProductService(IProductRepository repository, IMapper mapper) : base(repository, mapper)
+    public ProductService(
+        IProductRepository repository,
+        IMapper mapper
+    ) : base(repository, mapper)
     {
         _repository = repository;
         _mapper = mapper;
+        
     }
 
     public override async Task<IEnumerable<ProductDTO>> GetAllAsync()
     {
-        var products = await _repository.GetAll()
-            .Include(p => p.Category)  
-            .Include(p => p.Supplier)   
-            .ToListAsync();
-
+        var products = await _repository.GetAllWithDetails().ToListAsync();
         return _mapper.Map<IEnumerable<ProductDTO>>(products);
     }
 
     public override async Task<ResponseBase<ProductDTO>> GetByIdAsync(int id)
     {
         var response = new ResponseBase<ProductDTO>();
-
-        var product = await _repository.GetAll()
-            .Include(p => p.Category)  
-            .Include(p => p.Supplier)   
-            .FirstOrDefaultAsync(p => p.Id == id);
+        var product = await _repository.GetByIdWithDetailsAsync(id);
 
         if (product == null)
         {
@@ -49,8 +47,6 @@ public class ProductService : GenericService<Products, ProductDTO>, IProductServ
 
         return response;
     }
-
-
 
     //all'inserimento di un nuovo prodotto controllo
     //che idcategory e idsupplier siano validi

@@ -1,10 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 
 namespace MyWarehouse.WEB.Controllers;
-
+[Authorize]
 [Route("api/[controller]")]
 [ApiController]
 public class CategoryController : ControllerBase
@@ -32,6 +33,7 @@ public class CategoryController : ControllerBase
     #endregion
 
     #region POST
+    [Authorize(Roles = "admin")]
     [HttpPost]
     public async Task<IActionResult> CreateCategory([FromBody] CategoryDTO categoryDto)
     {
@@ -54,6 +56,7 @@ public class CategoryController : ControllerBase
     #endregion
 
     #region PUT
+    [Authorize(Roles = "admin")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateCategory(int id, [FromBody] CategoryDTO categoryDto)
     {

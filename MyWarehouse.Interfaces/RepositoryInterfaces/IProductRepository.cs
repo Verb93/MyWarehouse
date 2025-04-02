@@ -8,5 +8,6 @@ public interface IProductRepository : IGenericRepository<Products>
     Task<bool> SupplierExistsAsync(int supplierId);
     IQueryable<Products> GetByCategory(int categoryId);
     IQueryable<Products> GetBySupplier(int supplierId);
-
+    IQueryable<Products> GetAllWithDetails();
+    Task<Products?> GetByIdWithDetailsAsync(int id);
 }

@@ -1,7 +1,9 @@
 ﻿using AutoMapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
+using MyWarehouse.Common.Security;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
 using MyWarehouse.Interfaces.ServiceInterfaces;
@@ -13,19 +15,20 @@ public class SupplierService : GenericService<Suppliers, SupplierDTO>, ISupplier
     private readonly ISupplierRepository _supplierRepository;
     private readonly IProductRepository _productRepository;
     private readonly IMapper _mapper;
-    public SupplierService(ISupplierRepository repository, IProductRepository productRepository, IMapper mapper) : base(repository, mapper)
+    public SupplierService(
+        ISupplierRepository supplierRepository,
+        IProductRepository productRepository,
+        IMapper mapper
+    ) : base(supplierRepository, mapper)
     {
-        _supplierRepository = repository;
+        _supplierRepository = supplierRepository;
         _productRepository = productRepository;
         _mapper = mapper;
     }
 
     public override async Task<IEnumerable<SupplierDTO>> GetAllAsync()
     {
-        var suppliers = await _supplierRepository.GetAll()
-            .Include(s => s.City)
-            .ToListAsync();
-
+        var suppliers = await _supplierRepository.GetAllWithCity().ToListAsync();
         return _mapper.Map<IEnumerable<SupplierDTO>>(suppliers);
     }
 
@@ -33,9 +36,7 @@ public class SupplierService : GenericService<Suppliers, SupplierDTO>, ISupplier
     {
         var response = new ResponseBase<SupplierDTO>();
 
-        var supplier = await _supplierRepository.GetAll()
-            .Include(s => s.City)  
-            .FirstOrDefaultAsync(s => s.Id == id);
+        var supplier = await _supplierRepository.GetByIdWithCityAsync(id);
 
         if (supplier == null)
         {
@@ -48,7 +49,6 @@ public class SupplierService : GenericService<Suppliers, SupplierDTO>, ISupplier
 
         return response;
     }
-
 
     public async Task<ResponseBase<IEnumerable<SupplierDTO>>> GetSuppliersByCityIdAsync(int cityId)
     {

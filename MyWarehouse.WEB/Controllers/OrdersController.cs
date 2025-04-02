@@ -1,10 +1,12 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 
 namespace MyWarehouse.WEB.Controllers;
 
+[Authorize]
 [Route("api/[controller]")]
 [ApiController]
 public class OrdersController : ControllerBase
@@ -59,8 +61,7 @@ public class OrdersController : ControllerBase
     #endregion
 
     #region POST
-
-    // creiamo un nuovo ordine
+    [Authorize(Roles = "client,supplier")]
     [HttpPost]
     public async Task<IActionResult> CreateOrder([FromBody] OrderDTO orderDto)
     {

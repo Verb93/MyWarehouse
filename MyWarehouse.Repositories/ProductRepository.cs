@@ -34,4 +34,19 @@ public class ProductRepository : GenericRepository<Products>, IProductRepository
                              .Include(p => p.Category)
                              .Include(p => p.Supplier);
     }
+    public IQueryable<Products> GetAllWithDetails()
+    {
+        return _dbSet
+            .Include(p => p.Category)
+            .Include(p => p.Supplier);
+    }
+
+    public async Task<Products?> GetByIdWithDetailsAsync(int id)
+    {
+        return await _dbSet
+            .Include(p => p.Category)
+            .Include(p => p.Supplier)
+            .FirstOrDefaultAsync(p => p.Id == id);
+    }
+
 }

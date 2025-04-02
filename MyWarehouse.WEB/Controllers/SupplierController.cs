@@ -1,10 +1,12 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 
 namespace MyWarehouse.WEB.Controllers;
 
+[Authorize]
 [Route("api/[controller]")]
 [ApiController]
 public class SupplierController : ControllerBase
@@ -40,6 +42,7 @@ public class SupplierController : ControllerBase
     #endregion
 
     #region POST
+    [Authorize(Roles = "admin")]
     [HttpPost]
     public async Task<IActionResult> CreateSupplier([FromBody] SupplierDTO supplierDto)
     {
@@ -61,6 +64,7 @@ public class SupplierController : ControllerBase
     #endregion
 
     #region PUT
+    [Authorize(Roles = "admin,supplier")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateSupplier(int id, [FromBody] SupplierDTO supplierDto)
     {
@@ -82,6 +86,7 @@ public class SupplierController : ControllerBase
     #endregion
 
     #region DELETE
+    [Authorize(Roles = "admin,supplier")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteSupplier(int id)
     {

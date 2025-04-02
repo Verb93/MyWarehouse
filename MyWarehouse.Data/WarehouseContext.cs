@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using MyWarehouse.Data.Models;
+using System.Data;
 
 namespace MyWarehouse.Data;
 
@@ -14,6 +15,8 @@ public class WarehouseContext : DbContext
     public DbSet<Orders> Orders { get; set; }
     public DbSet<OrderDetails> OrderDetails { get; set; }
     public DbSet<StatusOrders> StatusOrders { get; set; }
+    public DbSet<Roles> Roles { get; set; }
+    public DbSet<SupplierUsers> SupplierUsers { get; set; }
 
     public WarehouseContext(DbContextOptions<WarehouseContext> options)
     : base(options)
@@ -23,7 +26,7 @@ public class WarehouseContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
+        #region PRODUCTS
         modelBuilder.Entity<Products>(entity =>
         {
             entity.Property(e => e.Id)
@@ -40,7 +43,9 @@ public class WarehouseContext : DbContext
             entity.Property(p => p.Price)
                 .HasColumnType("decimal(10,2)");
         });
+        #endregion
 
+        #region ORDERS
         modelBuilder.Entity<Orders>(entity =>
         {
             entity.Property(e => e.Id)
@@ -61,7 +66,9 @@ public class WarehouseContext : DbContext
                 .HasColumnType("decimal(10,2)");
 
         });
+        #endregion
 
+        #region STATUSORDER
         modelBuilder.Entity<StatusOrders>(entity =>
         {
             entity.Property(e => e.Id)
@@ -78,7 +85,9 @@ public class WarehouseContext : DbContext
                 new StatusOrders { Id = 4, Description = "Annullato" }
                 );
         });
+        #endregion
 
+        #region ORDERDETAILS
         modelBuilder.Entity<OrderDetails>(entity =>
         {
             entity.HasKey(od => new { od.IdOrder, od.IdProduct });
@@ -94,7 +103,9 @@ public class WarehouseContext : DbContext
             entity.Property(od => od.UnitPrice)
                 .HasColumnType("decimal(10,2)");
         });
+        #endregion
 
+        #region SUPPLIERS
         modelBuilder.Entity<Suppliers>(entity =>
         {
             entity.Property(e => e.Id)
@@ -104,7 +115,9 @@ public class WarehouseContext : DbContext
                 .WithMany(c => c.Suppliers)
                 .HasForeignKey(s => s.IdCity);
         });
+        #endregion
 
+        #region USERS
         modelBuilder.Entity<Users>(entity =>
         {
             entity.Property(e => e.Id)
@@ -118,19 +131,57 @@ public class WarehouseContext : DbContext
 
             entity.Property(e => e.IsDeleted)
                 .HasDefaultValue(false);
-        });
 
+            entity.HasOne(u => u.Role)
+                .WithMany(r => r.Users)
+                .HasForeignKey(u => u.IdRole);
+        });
+        #endregion
+
+        #region SUPPLIERUSERS
+        modelBuilder.Entity<SupplierUsers>(entity =>
+        {
+            entity.HasKey(su => new { su.IdSupplier, su.IdUser });
+
+            entity.HasOne(su => su.Supplier)
+                .WithMany(s => s.SupplierUsers)
+                .HasForeignKey(su => su.IdSupplier);
+
+            entity.HasOne(su => su.User)
+                .WithMany(u => u.SupplierUsers)
+                .HasForeignKey(su => su.IdUser);
+        });
+        #endregion
+
+        #region CITIES
         modelBuilder.Entity<Cities>(entity =>
         {
             entity.Property(e => e.Id)
                 .HasColumnName("IdCity");
         });
+        #endregion
 
+        #region CATEGORIES
         modelBuilder.Entity<Categories>(entity =>
         {
             entity.Property(e => e.Id)
                 .HasColumnName("IdCategory");
         });
+        #endregion
+
+        #region ROLES
+        modelBuilder.Entity<Roles>(entity =>
+        {
+            entity.Property(e => e.Id)
+                .HasColumnName("IdRole");
+
+            entity.HasData(
+                new Roles { Id = 1, Name = "admin" },
+                new Roles { Id = 2, Name = "client" },
+                new Roles { Id = 3, Name = "usersupplier" }
+            );
+        });
+        #endregion
     }
 
 }

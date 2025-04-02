@@ -1,13 +1,18 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using MyWarehouse.Common.ProfileData;
 using MyWarehouse.Common.Security;
 using MyWarehouse.Common.Security.SecurityInterface;
 using MyWarehouse.Data;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
+using MyWarehouse.Interfaces.SecurityInterface;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 using MyWarehouse.Repositories;
 using MyWarehouse.Services;
+using MyWarehouse.Services.Security;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +32,7 @@ builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
 builder.Services.AddScoped<ICityRepository, CityRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<ISupplierUserRepository, SupplierUserRepository>();
 
 // Registra il servizio specifico, passando sia l'entità che il DTO
 builder.Services.AddScoped<IProductService, ProductService>();
@@ -36,18 +42,48 @@ builder.Services.AddScoped<ICityService, CityService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IPasswordService<Users>, PasswordService<Users>>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 
+//JWT
+var jwtSettingsSection = builder.Configuration.GetSection("JwtSettings");
+builder.Services.Configure<JwtSetting>(jwtSettingsSection);
+
+var jwtSetting = jwtSettingsSection.Get<JwtSetting>();
+var key = Encoding.ASCII.GetBytes(jwtSetting.Key);
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = true,
+        ValidIssuer = jwtSetting.Issuer,
+        ValidateAudience = true,
+        ValidAudience = jwtSetting.Audience,
+        ClockSkew = TimeSpan.Zero
+    };
+});
+
+builder.Services.AddScoped<IJwtService, JwtService>();
 
 builder.Services.AddControllers();
 
-builder.Services.AddDistributedMemoryCache();
+/*builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(option =>
 {
     option.IdleTimeout = TimeSpan.FromHours(1);
     option.Cookie.HttpOnly = true;
     option.Cookie.IsEssential = true;
 });
-
+*/
 builder.Services.AddHttpContextAccessor();
 
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
@@ -59,7 +95,7 @@ builder.Services.AddCors(options =>
                             policy.WithOrigins("http://localhost:4200")
                             .AllowAnyHeader()
                             .AllowAnyMethod();
-                        });    
+                        });
 });
 
 var app = builder.Build();
@@ -71,11 +107,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseSession();
+//app.UseSession();
 app.UseCors(MyAllowSpecificOrigins);
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-
-

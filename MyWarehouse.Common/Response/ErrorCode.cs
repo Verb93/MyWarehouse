@@ -6,5 +6,6 @@ public enum ErrorCode
     UnknowError = 1,
     NotFound = 2,
     ValidationError = 3,
-    ServiceUnavailable = 4
+    ServiceUnavailable = 4,
+    Unauthorized = 5
 }

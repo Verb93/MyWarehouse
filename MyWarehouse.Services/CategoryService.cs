@@ -24,14 +24,14 @@ public class CategoryService : GenericService<Categories, CategoryDTO>, ICategor
     public async Task<ResponseBase<CategoryDTO>> CreateCategoryAsync(CategoryDTO dto)
     {
         var response = new ResponseBase<CategoryDTO>();
-        bool nameExists = await _repository.ExistsByNameAsync(dto.Name);
+
         try
         {
             if (string.IsNullOrWhiteSpace(dto.Name))
             {
                 response = ResponseBase<CategoryDTO>.Fail("Il nome della categoria non può essere vuoto.", ErrorCode.ValidationError);
             }
-            else if (nameExists)
+            else if (await _repository.ExistsByNameAsync(dto.Name))
             {
                 response = ResponseBase<CategoryDTO>.Fail($"Esiste già una categoria con nome '{dto.Name}'", ErrorCode.ValidationError);
             }
@@ -55,24 +55,28 @@ public class CategoryService : GenericService<Categories, CategoryDTO>, ICategor
     public async Task<ResponseBase<CategoryDTO>> UpdateCategoryAsync(CategoryDTO dto)
     {
         var response = new ResponseBase<CategoryDTO>();
-        var category = await _repository.GetByIdAsync(dto.Id);
-        bool nameExists = await _repository.ExistsByNameAsync(dto.Name);
 
         try
         {
+            var category = await _repository.GetByIdAsync(dto.Id);
+
             if (category == null)
             {
-                response = ResponseBase<CategoryDTO>.Fail("categoria non trovata", ErrorCode.NotFound);
+                response = ResponseBase<CategoryDTO>.Fail("Categoria non trovata", ErrorCode.NotFound);
             }
-            else if (nameExists && category.Name != dto.Name)
+            else if (string.IsNullOrWhiteSpace(dto.Name))
+            {
+                response = ResponseBase<CategoryDTO>.Fail("Il nome della categoria non può essere vuoto.", ErrorCode.ValidationError);
+            }
+            else if (category.Name != dto.Name && await _repository.ExistsByNameAsync(dto.Name))
             {
                 response = ResponseBase<CategoryDTO>.Fail($"Il nome '{dto.Name}' è già in uso", ErrorCode.ValidationError);
             }
             else
             {
                 category.Name = dto.Name;
-                var updateCategory = await _repository.UpdateAsync(category);
-                response = ResponseBase<CategoryDTO>.Success(_mapper.Map<CategoryDTO>(updateCategory));
+                var updatedCategory = await _repository.UpdateAsync(category);
+                response = ResponseBase<CategoryDTO>.Success(_mapper.Map<CategoryDTO>(updatedCategory));
             }
         }
         catch (Exception ex)
