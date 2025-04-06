@@ -17,6 +17,9 @@ public class WarehouseContext : DbContext
     public DbSet<StatusOrders> StatusOrders { get; set; }
     public DbSet<Roles> Roles { get; set; }
     public DbSet<SupplierUsers> SupplierUsers { get; set; }
+    public DbSet<Permissions> Permissions { get; set; }
+    public DbSet<RolePermissions> RolePermissions { get; set; }
+
 
     public WarehouseContext(DbContextOptions<WarehouseContext> options)
     : base(options)
@@ -182,6 +185,34 @@ public class WarehouseContext : DbContext
             );
         });
         #endregion
+
+        #region PERMISSIONS
+        modelBuilder.Entity<Permissions>(entity =>
+        {
+            entity.Property(p => p.Id)
+                  .HasColumnName("IdPermission");
+        });
+        #endregion
+
+        #region ROLEPERMISSIONS
+        modelBuilder.Entity<RolePermissions>(entity =>
+        {
+            entity.Property(p => p.Id)
+                  .HasColumnName("IdRolePermission");
+
+            entity.HasOne(rp => rp.Role)
+                  .WithMany(r => r.RolePermissions)
+                  .HasForeignKey(rp => rp.IdRole);
+
+            entity.HasOne(rp => rp.Permission)
+                  .WithMany(p => p.RolePermissions)
+                  .HasForeignKey(rp => rp.IdPermission);
+
+            entity.Property(rp => rp.OwnOnly)
+                  .HasDefaultValue(false);
+        });
+        #endregion
+
     }
 
 }

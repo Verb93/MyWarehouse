@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
+using MyWarehouse.Common.Security;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 
 namespace MyWarehouse.Common.Controllers;
@@ -50,7 +51,7 @@ public class ProductsController : ControllerBase
 
     #region POST
     // Solo admin e fornitori possono creare prodotti
-    [Authorize(Roles = "admin,supplier")]
+    [Authorize(Policy = Policies.AdminOrSupplier)]
     [HttpPost]
     public async Task<IActionResult> CreateProduct([FromBody] ProductDTO productDto)
     {
@@ -67,7 +68,7 @@ public class ProductsController : ControllerBase
 
     #region PUT
     // Solo admin e fornitori possono aggiornare
-    [Authorize(Roles = "admin,supplier")]
+    [Authorize(Policy = Policies.AdminOrSupplier)]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateProduct(int id, [FromBody] ProductDTO productDto)
     {
@@ -84,7 +85,7 @@ public class ProductsController : ControllerBase
 
     #region DELETE
     // Solo admin e fornitori possono eliminare
-    [Authorize(Roles = "admin,supplier")]
+    [Authorize(Policy = Policies.AdminOrSupplier)]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteProduct(int id)
     {

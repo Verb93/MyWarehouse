@@ -10,4 +10,3 @@ public class Orders : BaseEntity
     public decimal TotalPrice { get; set; }
     public ICollection<OrderDetails> OrderDetails { get; set; }
 }
-

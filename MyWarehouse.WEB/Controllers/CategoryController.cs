@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
+using MyWarehouse.Common.Security;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 
 namespace MyWarehouse.WEB.Controllers;
@@ -33,7 +34,7 @@ public class CategoryController : ControllerBase
     #endregion
 
     #region POST
-    [Authorize(Roles = "admin")]
+    [Authorize(Policy = Policies.Admin)]
     [HttpPost]
     public async Task<IActionResult> CreateCategory([FromBody] CategoryDTO categoryDto)
     {
@@ -56,7 +57,7 @@ public class CategoryController : ControllerBase
     #endregion
 
     #region PUT
-    [Authorize(Roles = "admin")]
+    [Authorize(Policy = Policies.Admin)]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateCategory(int id, [FromBody] CategoryDTO categoryDto)
     {
@@ -71,7 +72,7 @@ public class CategoryController : ControllerBase
         else
         {
             response = await _categoryService.UpdateCategoryAsync(categoryDto);
-            result = response.Result ? Ok(response.Result) : BadRequest(response.ErrorMessage);
+            result = response.Result ? Ok(response.Data) : BadRequest(response.ErrorMessage);
         }
 
         return result;

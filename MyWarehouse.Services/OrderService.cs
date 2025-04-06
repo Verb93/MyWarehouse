@@ -4,7 +4,9 @@ using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
+using MyWarehouse.Interfaces.SecurityInterface;
 using MyWarehouse.Interfaces.ServiceInterfaces;
+using System.Data;
 
 namespace MyWarehouse.Services;
 
@@ -12,12 +14,14 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
 {
     private readonly IOrderRepository _repository;
     private readonly IProductRepository _productRepository;
+    private readonly IAuthorizationService _authorizationService;
     private readonly IMapper _mapper;
 
-    public OrderService(IOrderRepository repository, IProductRepository productRepository, IMapper mapper) : base(repository, mapper)
+    public OrderService(IOrderRepository repository, IProductRepository productRepository, IAuthorizationService authorizationService, IMapper mapper) : base(repository, mapper)
     {
         _repository = repository;
         _productRepository = productRepository;
+        _authorizationService = authorizationService;
         _mapper = mapper;
     }
 
@@ -77,7 +81,7 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
 
     // l'ordine può essere annullato solo se è ancora in lavorazione
     // quando viene annullato, i prodotti vengono restituiti al magazzino
-    public async Task<ResponseBase<OrderDTO>> CancelOrderAsync(int orderId)
+    public async Task<ResponseBase<OrderDTO>> CancelOrderAsync(int orderId, int userId, string role)
     {
         var response = new ResponseBase<OrderDTO>();
         var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
@@ -87,6 +91,10 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
             if (order == null)
             {
                 response = ResponseBase<OrderDTO>.Fail($"Ordine con ID {orderId} non trovato.", ErrorCode.NotFound);
+            }
+            else if (!await _authorizationService.CanCancelOrderAsync(order, userId, role))
+            {
+                response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato ad annullare questo ordine.", ErrorCode.Unauthorized);
             }
             else if (order.IdStatus == 4) // Se è già annullato, blocchiamo l'operazione
             {
@@ -124,7 +132,7 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
     }
 
     // aggiorna lo stato dell'ordine solo se il cambiamento è valido
-    public async Task<ResponseBase<OrderDTO>> UpdateStatusOrderAsync(int orderId, int newStatusId)
+    public async Task<ResponseBase<OrderDTO>> UpdateStatusOrderAsync(int orderId, int newStatusId, int userId, string role)
     {
         var response = new ResponseBase<OrderDTO>();
         var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
@@ -134,6 +142,10 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
             if (order == null)
             {
                 response = ResponseBase<OrderDTO>.Fail($"Ordine con ID {orderId} non trovato.", ErrorCode.NotFound);
+            }
+            else if (!await _authorizationService.CanUpdateOrderStatusAsync(order, userId, role))
+            {
+                response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato a modificare lo stato di questo ordine.", ErrorCode.Unauthorized);
             }
             else if (order.IdStatus == newStatusId)
             {
@@ -188,20 +200,33 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
     }
 
     // otteniamo tutti gli ordini di un utente specifico
-    public async Task<ResponseBase<IEnumerable<OrderDTO>>> GetOrdersByUserIdAsync(int userId)
+    public async Task<ResponseBase<IEnumerable<OrderDTO>>> GetOrdersByUserIdAsync(
+    int userId,
+    int callerUserId,
+    string role)
     {
         var response = new ResponseBase<IEnumerable<OrderDTO>>();
-        var orders = await _repository.GetOrdersByUserId(userId).ToListAsync();
 
         try
         {
-            if (orders == null || !orders.Any())
+            var hasAccess = await _authorizationService.CanAccessOrdersByUserAsync(userId, callerUserId, role);
+
+            if (!hasAccess)
             {
-                response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Nessun ordine trovato per questo utente.", ErrorCode.NotFound);
+                response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Non sei autorizzato a visualizzare questi ordini.", ErrorCode.Unauthorized);
             }
             else
             {
-                response = ResponseBase<IEnumerable<OrderDTO>>.Success(_mapper.Map<IEnumerable<OrderDTO>>(orders));
+                var orders = await _repository.GetOrdersByUserId(userId).ToListAsync();
+
+                if (orders == null || !orders.Any())
+                {
+                    response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Nessun ordine trovato per questo utente.", ErrorCode.NotFound);
+                }
+                else
+                {
+                    response = ResponseBase<IEnumerable<OrderDTO>>.Success(_mapper.Map<IEnumerable<OrderDTO>>(orders));
+                }
             }
         }
         catch (Exception ex)
@@ -213,16 +238,24 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
     }
 
     // otteniamo un ordine specifico con dettagli
-    public async Task<ResponseBase<OrderDTO>> GetOrderByIdWithDetailsAsync(int orderId)
+    public async Task<ResponseBase<OrderDTO>> GetOrderByIdWithDetailsAsync(
+    int orderId,
+    int userId,
+    string role)
     {
         var response = new ResponseBase<OrderDTO>();
-        var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
 
         try
         {
+            var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
+
             if (order == null)
             {
                 response = ResponseBase<OrderDTO>.Fail("Ordine non trovato.", ErrorCode.NotFound);
+            }
+            else if (!await _authorizationService.CanAccessOrderWithDetailsAsync(order, userId, role))
+            {
+                response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato a visualizzare questo ordine.", ErrorCode.Unauthorized);
             }
             else
             {

@@ -1,12 +1,11 @@
 ﻿using AutoMapper;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
-using MyWarehouse.Common.Security;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
 using MyWarehouse.Interfaces.ServiceInterfaces;
+using MyWarehouse.Interfaces.SecurityInterface;
 
 namespace MyWarehouse.Services;
 
@@ -14,15 +13,18 @@ public class SupplierService : GenericService<Suppliers, SupplierDTO>, ISupplier
 {
     private readonly ISupplierRepository _supplierRepository;
     private readonly IProductRepository _productRepository;
+    private readonly IAuthorizationService _authorizationService;
     private readonly IMapper _mapper;
     public SupplierService(
         ISupplierRepository supplierRepository,
         IProductRepository productRepository,
+        IAuthorizationService authorizationService,
         IMapper mapper
     ) : base(supplierRepository, mapper)
     {
         _supplierRepository = supplierRepository;
         _productRepository = productRepository;
+        _authorizationService = authorizationService;
         _mapper = mapper;
     }
 
@@ -116,6 +118,10 @@ public class SupplierService : GenericService<Suppliers, SupplierDTO>, ISupplier
             {
                 response = ResponseBase<SupplierDTO>.Fail("Fornitore non trovato", ErrorCode.NotFound);
             }
+            else if (!await _authorizationService.CanAccessOwnResourceAsync<Suppliers>(dto.Id, s => s.Id))
+            {
+                response = ResponseBase<SupplierDTO>.Fail("Non sei autorizzato a modificare questo fornitore.", ErrorCode.Unauthorized);
+            }
             else if (supplier.IdCity != dto.IdCity && !await _supplierRepository.CityExistsAsync(dto.IdCity))
             {
                 response = ResponseBase<SupplierDTO>.Fail($"Città con ID {dto.IdCity} non trovata.", ErrorCode.NotFound);
@@ -144,20 +150,34 @@ public class SupplierService : GenericService<Suppliers, SupplierDTO>, ISupplier
     public async Task<ResponseBase<bool>> DeleteSupplierAsync(int id)
     {
         var response = new ResponseBase<bool>();
-        var productsToUpdate = await _supplierRepository.GetProductsBySupplierId(id).ToListAsync();
         try
         {
-            if (productsToUpdate.Any())
+            var supplier = await _supplierRepository.GetByIdAsync(id);
+            if (supplier == null)
             {
-                foreach (var product in productsToUpdate)
-                {
-                    product.Quantity = 0;
-                    product.IdSupplier = null;
-                    await _productRepository.UpdateAsync(product);
-                }
+                response = ResponseBase<bool>.Fail("Fornitore non trovato", ErrorCode.NotFound);
             }
-            await _supplierRepository.DeleteAsync(id);
-            response = ResponseBase<bool>.Success(true);
+            else if (!await _authorizationService.CanAccessOwnResourceAsync<Suppliers>(id, s => s.Id))
+            {
+                response = ResponseBase<bool>.Fail("Non sei autorizzato a eliminare questo fornitore.", ErrorCode.Unauthorized);
+            }
+            else
+            {
+                var productsToUpdate = await _supplierRepository.GetProductsBySupplierId(id).ToListAsync();
+
+                if (productsToUpdate.Any())
+                {
+                    foreach (var product in productsToUpdate)
+                    {
+                        product.Quantity = 0;
+                        product.IdSupplier = null;
+                        await _productRepository.UpdateAsync(product);
+                    }
+                }
+
+                await _supplierRepository.DeleteAsync(id);
+                response = ResponseBase<bool>.Success(true);
+            }
         }
         catch (Exception ex)
         {

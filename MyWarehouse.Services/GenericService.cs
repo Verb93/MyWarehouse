@@ -7,7 +7,7 @@ using MyWarehouse.Interfaces.ServiceInterfaces;
 namespace MyWarehouse.Services;
 
 
-public class GenericService<TEntity, TDTO> : IGenericService<TDTO>
+public abstract class GenericService<TEntity, TDTO> : IGenericService<TDTO>
     where TEntity : class
     where TDTO : class
 {

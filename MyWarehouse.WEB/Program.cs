@@ -42,7 +42,9 @@ builder.Services.AddScoped<ICityService, CityService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IPasswordService<Users>, PasswordService<Users>>();
+
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 
 //JWT
 var jwtSettingsSection = builder.Configuration.GetSection("JwtSettings");
@@ -73,6 +75,13 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddScoped<IJwtService, JwtService>();
+
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(Policies.Admin, Policies.AdminPolicy())
+    .AddPolicy(Policies.Client, Policies.ClientPolicy())
+    .AddPolicy(Policies.Supplier, Policies.SupplierPolicy())
+    .AddPolicy(Policies.AdminOrSupplier, Policies.AdminOrSupplierPolicy())
+    .AddPolicy(Policies.ClientOrSupplier, Policies.ClientOrSupplierPolicy());
 
 builder.Services.AddControllers();
 
@@ -111,6 +120,7 @@ app.UseHttpsRedirection();
 app.UseCors(MyAllowSpecificOrigins);
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();

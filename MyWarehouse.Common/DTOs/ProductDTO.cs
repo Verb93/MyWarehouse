@@ -8,6 +8,6 @@ public class ProductDTO
     public decimal Price { get; set; }
     public int IdCategory { get; set; }
     public required string CategoryName { get; set; }
-    public int IdSupplier { get; set; }
+    public int? IdSupplier { get; set; }
     public string SupplierName { get; set; }
 }

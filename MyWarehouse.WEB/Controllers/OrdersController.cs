@@ -2,7 +2,9 @@
 using Microsoft.AspNetCore.Mvc;
 using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
+using MyWarehouse.Common.Security;
 using MyWarehouse.Interfaces.ServiceInterfaces;
+using System.Security.Claims;
 
 namespace MyWarehouse.WEB.Controllers;
 
@@ -19,6 +21,7 @@ public class OrdersController : ControllerBase
     }
 
     #region GET
+    [Authorize(Policy = Policies.Admin)]
     [HttpGet]
     public async Task<IActionResult> GetAllOrders()
     {
@@ -26,7 +29,6 @@ public class OrdersController : ControllerBase
         return Ok(products);
     }
 
-    //Prodotto per ID
     [HttpGet("{id}")]
     public async Task<IActionResult> GetOrdertById(int id)
     {
@@ -35,6 +37,7 @@ public class OrdersController : ControllerBase
     }
 
     // otteniamo tutti gli ordini con dettagli
+    [Authorize(Policy = Policies.Admin)]
     [HttpGet("details")]
     public async Task<IActionResult> GetAllOrdersWithDetails()
     {
@@ -46,22 +49,34 @@ public class OrdersController : ControllerBase
     [HttpGet("{id}/details")]
     public async Task<IActionResult> GetOrderByIdWithDetails(int id)
     {
-        var response = await _orderService.GetOrderByIdWithDetailsAsync(id);
-        return response.Result ? Ok(response.Data) : NotFound(new { message = response.ErrorMessage });
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+
+        var response = await _orderService.GetOrderByIdWithDetailsAsync(id, userId, role);
+
+        return response.Result
+            ? Ok(response.Data)
+            : BadRequest(new { message = response.ErrorMessage });
     }
 
     // otteniamo tutti gli ordini di un utente
     [HttpGet("user/{userId}")]
     public async Task<IActionResult> GetOrdersByUser(int userId)
     {
-        var response = await _orderService.GetOrdersByUserIdAsync(userId);
-        return response.Result ? Ok(response.Data) : NotFound(new { message = response.ErrorMessage });
+        var callerUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+
+        var response = await _orderService.GetOrdersByUserIdAsync(userId, callerUserId, role);
+
+        return response.Result
+            ? Ok(response.Data)
+            : BadRequest(new { message = response.ErrorMessage });
     }
 
     #endregion
 
     #region POST
-    [Authorize(Roles = "client,supplier")]
+    [Authorize(Policy = Policies.ClientOrSupplier)]
     [HttpPost]
     public async Task<IActionResult> CreateOrder([FromBody] OrderDTO orderDto)
     {
@@ -76,8 +91,7 @@ public class OrdersController : ControllerBase
         else
         {
             response = await _orderService.CreateOrderAsync(orderDto);
-            result = response.Result ? CreatedAtAction(nameof(GetOrderByIdWithDetails), new { id = response.Data.Id }, response.Data)
-                                     : BadRequest(response.ErrorMessage);
+            result = response.Result ? Ok(response.Data) : BadRequest(new { message = response.ErrorMessage });
         }
 
         return result;
@@ -88,29 +102,37 @@ public class OrdersController : ControllerBase
     #region PUT
 
     // aggiorniamo lo stato di un ordine
+    [Authorize(Policy = Policies.AdminOrSupplier)]
     [HttpPut("{id}/status/{newStatusId}")]
     public async Task<IActionResult> UpdateOrderStatus(int id, int newStatusId)
     {
         IActionResult result;
         ResponseBase<OrderDTO> response;
 
-        response = await _orderService.UpdateStatusOrderAsync(id, newStatusId);
-        result = response.Result ? Ok(response.Data) : BadRequest(new { message = response.ErrorMessage });
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
+        response = await _orderService.UpdateStatusOrderAsync(id, newStatusId, userId, role);
+
+        result = response.Result
+            ? Ok(response.Data)
+            : BadRequest(new { message = response.ErrorMessage });
 
         return result;
     }
 
     // annulliamo un ordine
+    [Authorize(Policy = Policies.ClientOrSupplier)]
     [HttpPut("{id}/cancel")]
     public async Task<IActionResult> CancelOrder(int id)
     {
-        IActionResult result;
-        ResponseBase<OrderDTO> response;
+        var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "";
 
-        response = await _orderService.CancelOrderAsync(id);
-        result = response.Result ? Ok(response.Data) : BadRequest(new { message = response.ErrorMessage });
+        var response = await _orderService.CancelOrderAsync(id, userId, role);
 
-        return result;
+        return response.Result
+            ? Ok(response.Data)
+            : BadRequest(new { message = response.ErrorMessage });
     }
 
     #endregion

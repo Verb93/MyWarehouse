@@ -2,6 +2,7 @@
 using Microsoft.IdentityModel.Tokens;
 using MyWarehouse.Common.DTOs.Users;
 using MyWarehouse.Common.Security.SecurityInterface;
+using MyWarehouse.Data.Models;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -17,7 +18,7 @@ public class JwtService : IJwtService
         _jwtSetting = jwtOptions.Value;
     }
 
-    public string GenerateJwtToken(UserDTO userDTO)
+    public string GenerateJwtToken(UserDTO userDTO, List<RolePermissions> permissions)
     {
         var key = Encoding.ASCII.GetBytes(_jwtSetting.Key);
 
@@ -27,6 +28,11 @@ public class JwtService : IJwtService
             new Claim(ClaimTypes.Name, userDTO.Email),
             new Claim(ClaimTypes.Role, userDTO.RoleName ?? "User")
         };
+
+        var permissionClaims = permissions.Select(p =>
+        new Claim("Permission", $"{p.Permission.HttpVerb}:{p.Permission.Endpoint}:{(p.OwnOnly ? "1" : "0")}")
+        );
+        claims.AddRange(permissionClaims);
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {

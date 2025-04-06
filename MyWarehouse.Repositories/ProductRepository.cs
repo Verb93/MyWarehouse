@@ -16,7 +16,7 @@ public class ProductRepository : GenericRepository<Products>, IProductRepository
         return await _context.Categories.AnyAsync(c => c.Id == categoryId);
     }
 
-    public async Task<bool> SupplierExistsAsync(int supplierId) //esistenza del fornitore
+    public async Task<bool> SupplierExistsAsync(int? supplierId) //esistenza del fornitore
     {
         return await _context.Suppliers.AnyAsync(s => s.Id == supplierId);
     }

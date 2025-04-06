@@ -11,4 +11,6 @@ public interface IUserRepository : IGenericRepository<Users>
 {
     IQueryable<Users> GetAllWithRoles();
     Task<Users?> GetByEmailAsync(string email);
+    Task<Users?> GetByIdWithRoleAsync(int id);
+    Task<List<RolePermissions>> GetPermissionsByRoleAsync(int roleId);
 }

@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MyWarehouse.Common.DTOs.Users;
 using MyWarehouse.Common.Response;
+using MyWarehouse.Common.Security;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 using System.Security.Claims;
 
@@ -20,6 +21,7 @@ public class UserController : ControllerBase
     }
 
     #region GET
+    [Authorize(Policy = Policies.Admin)]
     [HttpGet]
     public async Task<IActionResult> GetAllUsers()
     {
@@ -30,20 +32,10 @@ public class UserController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetUserById(int id)
     {
-        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        IActionResult result;
-
-        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
-        {
-            result = Unauthorized(new { message = "Non autorizzato ad accedere a questi dati" });
-        }
-        else
-        {
-            var response = await _userService.GetByIdAsync(id);
-            result = response.Result ? Ok(response.Data) : NotFound(new { message = response.ErrorMessage });
-        }
-
-        return result;
+        var response = await _userService.GetUserByIdAsync(id);
+        return response.Result
+            ? Ok(response.Data)
+            : StatusCode((int)response.ErrorCode, new { message = response.ErrorMessage });
     }
     #endregion
 
@@ -51,17 +43,16 @@ public class UserController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateUser(int id, [FromBody] UserDTO userDto)
     {
-        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
         IActionResult result;
 
-        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
+        if (userDto == null || userDto.Id != id)
         {
-            result = Unauthorized(new { message = "Non autorizzato a modificare questo utente" });
+            result = BadRequest(new { message = "Dati non validi" });
         }
         else
         {
-            var response = await _userService.UpdateUserAsync(userDto);
-            result = response.Result ? Ok(response.Data) : BadRequest(response.ErrorMessage);
+            var response = await _userService.UpdateUserAsync(User, userDto);
+            result = response.Result ? Ok(response.Data) : StatusCode((int)response.ErrorCode, new { message = response.ErrorMessage });
         }
 
         return result;
@@ -70,17 +61,17 @@ public class UserController : ControllerBase
     [HttpPut("change-password/{id}")]
     public async Task<IActionResult> ChangePassword(int id, [FromBody] ChangePasswordDTO changePasswordDto)
     {
-        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
         IActionResult result;
 
-        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
+        if (changePasswordDto == null)
         {
-            result = Unauthorized(new { message = "Non autorizzato a modificare la password di questo utente" });
+            result = BadRequest(new { message = "Dati non validi" });
         }
         else
         {
-            var response = await _userService.ChangePasswordAsync(id, changePasswordDto);
-            result = response.Result ? Ok(new { message = "Password modificata con successo" }) : BadRequest(response.ErrorMessage);
+            var response = await _userService.ChangePasswordAsync(User, id, changePasswordDto);
+            result = response.Result ? Ok(new { message = "Password modificata con successo!" })
+                                     : StatusCode((int)response.ErrorCode, new { message = response.ErrorMessage });
         }
 
         return result;
@@ -91,20 +82,10 @@ public class UserController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteUser(int id)
     {
-        var userIdFromToken = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        IActionResult result;
+        var response = await _userService.DeleteUserAsync(User, id);
 
-        if (string.IsNullOrEmpty(userIdFromToken) || userIdFromToken != id.ToString())
-        {
-            result = Unauthorized(new { message = "Non autorizzato a eliminare questo utente" });
-        }
-        else
-        {
-            var response = await _userService.DeleteUserAsync(id);
-            result = response.Result ? Ok(new { message = "Utente eliminato con successo" }) : BadRequest(response.ErrorMessage);
-        }
-
-        return result;
+        return response.Result ? Ok(new { message = "Utente eliminato con successo!" })
+                                  : StatusCode((int)response.ErrorCode, new { message = response.ErrorMessage });
     }
     #endregion
 }

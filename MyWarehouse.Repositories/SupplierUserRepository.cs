@@ -33,4 +33,12 @@ public class SupplierUserRepository : ISupplierUserRepository
             .Select(su => (int?)su.IdSupplier)
             .FirstOrDefaultAsync();
     }
+
+    public async Task<List<int>> GetSupplierIdsByUserId(int userId)
+    {
+        return await _context.SupplierUsers
+            .Where(su => su.IdUser == userId)
+            .Select(su => su.IdSupplier)
+            .ToListAsync();
+    }
 }

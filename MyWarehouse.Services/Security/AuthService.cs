@@ -38,7 +38,7 @@ public class AuthService : IAuthService
 
         try
         {
-            var user = await _userRepository.GetByEmailAsync(loginDTO.Email);
+            var user = await _userRepository.GetAllWithRoles().FirstOrDefaultAsync(u => u.Email == loginDTO.Email);
 
             if (user == null)
             {
@@ -51,7 +51,8 @@ public class AuthService : IAuthService
             else
             {
                 var userDto = _mapper.Map<UserDTO>(user);
-                var token = _jwtService.GenerateJwtToken(userDto);
+                var rolePermissions = await _userRepository.GetPermissionsByRoleAsync(user.IdRole);
+                var token = _jwtService.GenerateJwtToken(userDto, rolePermissions);
                 response = ResponseBase<string>.Success(token);
             }
         }

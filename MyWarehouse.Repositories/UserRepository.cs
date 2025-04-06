@@ -23,4 +23,18 @@ public class UserRepository : GenericRepository<Users>, IUserRepository
             .Where(u => !u.IsDeleted);
     }
 
+    public async Task<Users?> GetByIdWithRoleAsync(int id)
+    {
+        return await GetAllWithRoles()
+            .FirstOrDefaultAsync(u => u.Id == id);
+    }
+
+
+    public async Task<List<RolePermissions>> GetPermissionsByRoleAsync(int roleId)
+    {
+        return await _context.RolePermissions
+            .Include(rp => rp.Permission)
+            .Where(rp => rp.IdRole == roleId)
+            .ToListAsync();
+    }
 }
