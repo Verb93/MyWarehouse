@@ -19,10 +19,6 @@ public class SupplierRepository : GenericRepository<Suppliers>, ISupplierReposit
     {
         return await _dbSet.AnyAsync(s => s.Name == name && s.IdCity == cityId);
     }
-    public IQueryable<Products> GetProductsBySupplierId(int supplierId)
-    {
-        return _context.Products.Where(p => p.IdSupplier == supplierId).AsQueryable();
-    }
     public IQueryable<Suppliers> GetSuppliersByCity(int cityId)
     {
         return _context.Suppliers.Where(s => s.IdCity == cityId).AsQueryable();
@@ -31,12 +27,28 @@ public class SupplierRepository : GenericRepository<Suppliers>, ISupplierReposit
     {
         return _dbSet.Include(s => s.City);
     }
-
     public Task<Suppliers?> GetByIdWithCityAsync(int id)
     {
         return _dbSet.Include(s => s.City)
                      .FirstOrDefaultAsync(s => s.Id == id);
     }
 
+    public async Task<List<Suppliers>> GetSuppliersByUserIdAsync(int userId)
+    {
+        var supplierIds = await _context.SupplierUsers
+            .Where(su => su.IdUser == userId)
+            .Select(su => su.IdSupplier)
+            .ToListAsync();
 
+        return await _dbSet
+            .Where(s => supplierIds.Contains(s.Id))
+            .Include(s => s.City)
+            .ToListAsync();
+    }
+
+    public async Task<bool> IsSupplierOwnedByUserAsync(int supplierId, int userId)
+    {
+        return await _context.SupplierUsers
+            .AnyAsync(su => su.IdSupplier == supplierId && su.IdUser == userId);
+    }
 }

@@ -1,8 +1,7 @@
 ﻿namespace MyWarehouse.Common.DTOs;
 
-public class CityDTO
+public class CityDTO : BaseEntityDTO
 {
-    public int Id { get; set; }
     public required string Name { get; set; }
 }
 

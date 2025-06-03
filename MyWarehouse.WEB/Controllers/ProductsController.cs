@@ -37,8 +37,20 @@ public class ProductsController : ControllerBase
     [HttpGet("category/{categoryId}")]
     public async Task<IActionResult> GetByCategory(int categoryId)
     {
+        IActionResult result;
+
         var response = await _productService.GetByCategoryAsync(categoryId);
-        return response.Result ? Ok(response.Data) : NotFound(new { message = response.ErrorMessage });
+
+        if (response.Result)
+        {
+            result = Ok(response.Data);
+        }
+        else
+        {
+            result = NotFound(new { message = response.ErrorMessage });
+        }
+
+        return result;
     }
 
     [HttpGet("supplier/{supplierId}")]
@@ -47,6 +59,15 @@ public class ProductsController : ControllerBase
         var response = await _productService.GetBySupplierAsync(supplierId);
         return response.Result ? Ok(response.Data) : NotFound(new { message = response.ErrorMessage });
     }
+
+    [HttpGet("owned")]
+    [Authorize(Policy = Policies.Supplier)]
+    public async Task<IActionResult> GetOwnedProducts()
+    {
+        var products = await _productService.GetOwnedProductsAsync();
+        return Ok(products);
+    }
+
     #endregion
 
     #region POST
@@ -55,14 +76,19 @@ public class ProductsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateProduct([FromBody] ProductDTO productDto)
     {
+        IActionResult result;
+        ResponseBase<ProductDTO> response;
         if (productDto == null)
         {
-            var error = ResponseBase<ProductDTO>.Fail("Dati non validi", ErrorCode.ValidationError);
-            return BadRequest(error);
+            response = ResponseBase<ProductDTO>.Fail("Dati non validi", ErrorCode.ValidationError);
+            result = BadRequest(response);
         }
-
-        var response = await _productService.AddProductAsync(productDto);
-        return response.Result ? Ok(response.Data) : BadRequest(new { message = response.ErrorMessage });
+        else
+        {
+            response = await _productService.AddProductAsync(productDto);
+            result = response.Result ? Ok(response.Data) : BadRequest(new { message = response.ErrorMessage });
+        }
+        return result;
     }
     #endregion
 
@@ -72,14 +98,19 @@ public class ProductsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateProduct(int id, [FromBody] ProductDTO productDto)
     {
+        IActionResult result;
+        ResponseBase<ProductDTO> response;
         if (productDto == null || productDto.Id != id)
         {
-            var error = ResponseBase<ProductDTO>.Fail("Dati non validi", ErrorCode.ValidationError);
-            return BadRequest(error);
+            response = ResponseBase<ProductDTO>.Fail("Dati non validi", ErrorCode.ValidationError);
+            result = BadRequest(response);
         }
-
-        var response = await _productService.UpdateProductAsync(productDto);
-        return response.Result ? Ok(response.Data) : BadRequest(new { message = response.ErrorMessage });
+        else
+        {
+            response = await _productService.UpdateProductAsync(productDto);
+            result = response.Result ? Ok(response.Data) : BadRequest(new { message = response.ErrorMessage });
+        }
+        return result;
     }
     #endregion
 

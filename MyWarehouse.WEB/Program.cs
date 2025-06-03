@@ -33,6 +33,11 @@ builder.Services.AddScoped<ICityRepository, CityRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<ISupplierUserRepository, SupplierUserRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
+builder.Services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
+builder.Services.AddScoped<ICartRepository, CartRepository>();
+builder.Services.AddScoped<IAddressRepository, AddressRepository>();
 
 // Registra il servizio specifico, passando sia l'entità che il DTO
 builder.Services.AddScoped<IProductService, ProductService>();
@@ -42,6 +47,9 @@ builder.Services.AddScoped<ICityService, CityService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddSingleton<IPasswordService<Users>, PasswordService<Users>>();
+builder.Services.AddScoped<IRoleService, RoleService>();
+builder.Services.AddScoped<ICartService, CartService>();
+builder.Services.AddScoped<IAddressService, AddressService>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();

@@ -20,6 +20,7 @@ public class SupplierController : ControllerBase
     }
 
     #region GET
+    [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> GetAllSupplier()
     {
@@ -38,12 +39,26 @@ public class SupplierController : ControllerBase
     public async Task<IActionResult> GetSuppliersByCity(int cityId)
     {
         var response = await _supplierService.GetSuppliersByCityIdAsync(cityId);
-        return response.Result ? Ok(response.Data) : NotFound(response.ErrorMessage);
+        return response.Result ? Ok(response.Data) : NotFound(new { message = response.ErrorMessage });
+    }
+
+    [HttpGet("by-user/{userId}")]
+    public async Task<IActionResult> GetSuppliersByUserId(int userId)
+    {
+        var response = await _supplierService.GetSuppliersByUserIdAsync(userId);
+        return response.Result ? Ok(response.Data) : BadRequest(response.ErrorMessage);
+    }
+
+    [HttpGet("owned")]
+    public async Task<IActionResult> GetOwnedSuppliers()
+    {
+        var response = await _supplierService.GetOwnedSuppliersAsync();
+        return response.Result ? Ok(response.Data) : BadRequest(new { message = response.ErrorMessage });
     }
     #endregion
 
     #region POST
-    [Authorize(Policy = Policies.Admin)]
+    [AllowAnonymous]
     [HttpPost]
     public async Task<IActionResult> CreateSupplier([FromBody] SupplierDTO supplierDto)
     {

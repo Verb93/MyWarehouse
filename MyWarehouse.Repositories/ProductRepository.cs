@@ -49,4 +49,25 @@ public class ProductRepository : GenericRepository<Products>, IProductRepository
             .FirstOrDefaultAsync(p => p.Id == id);
     }
 
+    //verifica se il prodotto è del fornitore collegato a quell’utente (ownership)
+    public async Task<bool> IsProductOwnedByUserAsync(int productId, int userId)
+    {
+        return await _dbSet
+            .Where(p => p.Id == productId && p.IdSupplier != null)
+            .AnyAsync(p => _context.SupplierUsers.Any(su =>
+                su.IdSupplier == p.IdSupplier &&
+                su.IdUser == userId));
+    }
+
+    //prendi tutti i prodotti del fornitore collegato a quell’utente (usato nel pannello supplier)
+    public IQueryable<Products> GetOwnedProductsByUser(int userId)
+    {
+        return _dbSet
+            .Where(p => p.IdSupplier != null &&
+                        _context.SupplierUsers.Any(su =>
+                            su.IdSupplier == p.IdSupplier &&
+                            su.IdUser == userId))
+            .Include(p => p.Category)
+            .Include(p => p.Supplier);
+    }
 }

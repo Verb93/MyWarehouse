@@ -1,16 +1,15 @@
 ﻿using MyWarehouse.Data.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MyWarehouse.Interfaces.RepositoryInterfaces;
 
 public interface IUserRepository : IGenericRepository<Users>
 {
+    Task AddUserRolesAsync(int userId, List<int> roleIds);
     IQueryable<Users> GetAllWithRoles();
     Task<Users?> GetByEmailAsync(string email);
     Task<Users?> GetByIdWithRoleAsync(int id);
-    Task<List<RolePermissions>> GetPermissionsByRoleAsync(int roleId);
+    Task<List<RolePermissions>> GetPermissionsByRolesAsync(List<int> roleIds);
+    Task<List<string>> GetUserRoleNamesAsync(int userId);
+    Task RemoveAllUserRolesAsync(int userId);
 }
+//TODO: remove unused

@@ -8,6 +8,7 @@ public interface ISupplierRepository : IGenericRepository<Suppliers>
     Task<bool> ExistsByNameAndCityAsync(string name, int cityId);
     IQueryable<Suppliers> GetAllWithCity();
     Task<Suppliers?> GetByIdWithCityAsync(int id);
-    IQueryable<Products> GetProductsBySupplierId(int supplierId);
     IQueryable<Suppliers> GetSuppliersByCity(int cityId);
+    Task<List<Suppliers>> GetSuppliersByUserIdAsync(int userId);
+    Task<bool> IsSupplierOwnedByUserAsync(int supplierId, int userId);
 }

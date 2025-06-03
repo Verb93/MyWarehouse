@@ -1,6 +1,6 @@
 ﻿using AutoMapper;
 using Microsoft.EntityFrameworkCore;
-using MyWarehouse.Common.DTOs;
+using MyWarehouse.Common.DTOs.Orders;
 using MyWarehouse.Common.Response;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
@@ -14,13 +14,22 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
 {
     private readonly IOrderRepository _repository;
     private readonly IProductRepository _productRepository;
+    private readonly ICartRepository _cartRepository;
+    private readonly IAddressRepository _addressRepository;
     private readonly IAuthorizationService _authorizationService;
     private readonly IMapper _mapper;
 
-    public OrderService(IOrderRepository repository, IProductRepository productRepository, IAuthorizationService authorizationService, IMapper mapper) : base(repository, mapper)
+    public OrderService(IOrderRepository repository, 
+        IProductRepository productRepository, 
+        ICartRepository cartRepository,
+        IAddressRepository addressRepository,
+        IAuthorizationService authorizationService, 
+        IMapper mapper) : base(repository, mapper)
     {
         _repository = repository;
         _productRepository = productRepository;
+        _cartRepository = cartRepository;
+        _addressRepository = addressRepository;
         _authorizationService = authorizationService;
         _mapper = mapper;
     }
@@ -29,51 +38,74 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
     // che i prodotti esistano e abbiano quantità sufficiente
     // che il prezzo unitario venga copiato correttamente
     // che il prezzo totale venga calcolato correttamente
-    public async Task<ResponseBase<OrderDTO>> CreateOrderAsync(OrderDTO dto)
+    public async Task<ResponseBase<bool>> CreateOrderAsync(CheckoutRequest dto)
     {
-        var response = new ResponseBase<OrderDTO>();
-        var order = _mapper.Map<Orders>(dto);
-        order.OrderDate = DateTime.UtcNow;
-        order.OrderDetails ??= new List<OrderDetails>();
-        order.IdStatus = 1; // Stato "In lavorazione"
+        var response = new ResponseBase<bool>();
+        var userId = _authorizationService.GetCurrentUserId();
 
-        decimal totalPrice = 0;
-
-        try
+        var address = await _addressRepository.GetByIdAsync(dto.IdAddress);
+        if (address == null || address.IdUser != userId)
         {
-            foreach (var item in dto.OrderDetails)
+            response = ResponseBase<bool>.Fail("Indirizzo non valido o non associato all'utente.", ErrorCode.Unauthorized);
+        }
+        else
+        {
+            var cartItems = await _cartRepository.GetCartItemsWithProductsAsync(userId);
+            if (!cartItems.Any())
             {
-                var product = await _productRepository.GetByIdAsync(item.IdProduct);
-                if (product == null || product.Quantity < item.Quantity)
-                {
-                    response = ResponseBase<OrderDTO>.Fail($"Quantità non disponibile per il prodotto con ID {item.IdProduct}.", ErrorCode.ValidationError);
-                }
-                else
-                {
-                    product.Quantity -= item.Quantity;
-                    await _productRepository.UpdateAsync(product);
+                response = ResponseBase<bool>.Fail("Il carrello è vuoto.", ErrorCode.ValidationError);
+            }
+            else
+            {
+                bool hasErrors = false;
 
-                    var unitPrice = product.Price;
-                    totalPrice += item.Quantity * unitPrice;
-
-                    order.OrderDetails.Add(new OrderDetails
+                // Raggruppa per fornitore
+                var grouped = cartItems.GroupBy(i => i.Product.IdSupplier);
+                foreach (var group in grouped)
+                {
+                    var order = new Orders
                     {
-                        IdProduct = item.IdProduct,
-                        Quantity = item.Quantity,
-                        UnitPrice = unitPrice
-                    });
+                        IdUser = userId,
+                        IdAddress = dto.IdAddress,
+                        IdStatus = 1, // In lavorazione
+                        OrderDate = DateTime.UtcNow,
+                        TotalPrice = 0,
+                        OrderDetails = new List<OrderDetails>()
+                    };
 
-                    response = ResponseBase<OrderDTO>.Success(_mapper.Map<OrderDTO>(order));
+                    foreach (var item in group)
+                    {
+                        if (item.Product.Quantity < item.Quantity)
+                        {
+                            response = ResponseBase<bool>.Fail($"Quantità non disponibile per il prodotto {item.Product.Name}", ErrorCode.ValidationError);
+                            hasErrors = true;
+                            break;
+                        }
+
+                        item.Product.Quantity -= item.Quantity;
+                        await _productRepository.UpdateAsync(item.Product);
+
+                        order.OrderDetails.Add(new OrderDetails
+                        {
+                            IdProduct = item.IdProduct,
+                            Quantity = item.Quantity,
+                            UnitPrice = item.Product.Price,
+                        });
+
+                        order.TotalPrice += item.Quantity * item.Product.Price;
+                    }
+
+                    if (hasErrors) break;
+
+                    await _repository.AddAsync(order);
+                }
+
+                if (!hasErrors)
+                {
+                    await _cartRepository.ClearCartAsync(userId);
+                    response = ResponseBase<bool>.Success(true);
                 }
             }
-
-            order.TotalPrice = totalPrice;
-            var createdOrder = await _repository.AddAsync(order);
-            response = ResponseBase<OrderDTO>.Success(_mapper.Map<OrderDTO>(createdOrder));
-        }
-        catch (Exception ex)
-        {
-            response = ResponseBase<OrderDTO>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
         }
 
         return response;
@@ -81,22 +113,28 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
 
     // l'ordine può essere annullato solo se è ancora in lavorazione
     // quando viene annullato, i prodotti vengono restituiti al magazzino
-    public async Task<ResponseBase<OrderDTO>> CancelOrderAsync(int orderId, int userId, string role)
+    public async Task<ResponseBase<OrderDTO>> CancelOrderAsync(int orderId)
     {
         var response = new ResponseBase<OrderDTO>();
-        var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
+        var userId = _authorizationService.GetCurrentUserId();
+        var (hasPermission, ownOnly) = await _authorizationService.HasPermissionAsync(userId, "CanCancelOrder");
 
-        try
+        if (!hasPermission)
         {
+            response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato ad annullare ordini.", ErrorCode.Unauthorized);
+        }
+        else
+        {
+            var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
             if (order == null)
             {
-                response = ResponseBase<OrderDTO>.Fail($"Ordine con ID {orderId} non trovato.", ErrorCode.NotFound);
+                response = ResponseBase<OrderDTO>.Fail("Ordine non trovato.", ErrorCode.NotFound);
             }
-            else if (!await _authorizationService.CanCancelOrderAsync(order, userId, role))
+            else if (ownOnly && !await _repository.IsOrderOwnedByUserAsync(orderId, userId))
             {
-                response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato ad annullare questo ordine.", ErrorCode.Unauthorized);
+                response = ResponseBase<OrderDTO>.Fail("Non sei il proprietario di questo ordine.", ErrorCode.Unauthorized);
             }
-            else if (order.IdStatus == 4) // Se è già annullato, blocchiamo l'operazione
+            else if (order.IdStatus == 4)
             {
                 response = ResponseBase<OrderDTO>.Fail("L'ordine è già stato annullato.", ErrorCode.ValidationError);
             }
@@ -106,8 +144,8 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
             }
             else
             {
-                order.IdStatus = 4; // Stato "Annullato"
-                order.TotalPrice = 0; // Se annullato, prezzo totale a 0
+                order.IdStatus = 4; // Annullato
+                order.TotalPrice = 0;
 
                 foreach (var item in order.OrderDetails)
                 {
@@ -123,56 +161,51 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
                 response = ResponseBase<OrderDTO>.Success(_mapper.Map<OrderDTO>(updatedOrder));
             }
         }
-        catch (Exception ex)
-        {
-            response = ResponseBase<OrderDTO>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
-        }
-
         return response;
     }
 
     // aggiorna lo stato dell'ordine solo se il cambiamento è valido
-    public async Task<ResponseBase<OrderDTO>> UpdateStatusOrderAsync(int orderId, int newStatusId, int userId, string role)
+    public async Task<ResponseBase<OrderDTO>> UpdateStatusOrderAsync(int orderId, int newStatusId)
     {
         var response = new ResponseBase<OrderDTO>();
+        var userId = _authorizationService.GetCurrentUserId();
+        var (hasPermission, ownOnly) = await _authorizationService.HasPermissionAsync(userId, "CanUpdateOrderStatus");
+
         var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
 
-        try
+        if (order == null)
         {
-            if (order == null)
-            {
-                response = ResponseBase<OrderDTO>.Fail($"Ordine con ID {orderId} non trovato.", ErrorCode.NotFound);
-            }
-            else if (!await _authorizationService.CanUpdateOrderStatusAsync(order, userId, role))
-            {
-                response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato a modificare lo stato di questo ordine.", ErrorCode.Unauthorized);
-            }
-            else if (order.IdStatus == newStatusId)
-            {
-                response = ResponseBase<OrderDTO>.Fail("Lo stato dell'ordine è già impostato su questo valore.", ErrorCode.ValidationError);
-            }
-            else if (order.IdStatus == 3 || order.IdStatus == 4)
-            {
-                response = ResponseBase<OrderDTO>.Fail("Lo stato di un ordine consegnato o annullato non può essere modificato.", ErrorCode.ValidationError);
-            }
-            else if ((order.IdStatus == 1 && newStatusId == 2) || (order.IdStatus == 2 && newStatusId == 3))
-            {
-                order.IdStatus = newStatusId;
-                var updatedOrder = await _repository.UpdateAsync(order);
-                response = ResponseBase<OrderDTO>.Success(_mapper.Map<OrderDTO>(updatedOrder));
-            }
-            else
-            {
-                response = ResponseBase<OrderDTO>.Fail("Transizione di stato non valida.", ErrorCode.ValidationError);
-            }
+            response = ResponseBase<OrderDTO>.Fail("Ordine non trovato.", ErrorCode.NotFound);
         }
-        catch (Exception ex)
+        else if (!hasPermission)
         {
-            response = ResponseBase<OrderDTO>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
+            response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato a modificare lo stato di questo ordine.", ErrorCode.Unauthorized);
         }
-
+        else if (ownOnly && !await _repository.IsOrderOwnedByUserAsync(orderId, userId))
+        {
+            response = ResponseBase<OrderDTO>.Fail("Non sei il proprietario di questo ordine.", ErrorCode.Unauthorized);
+        }
+        else if (order.IdStatus == newStatusId)
+        {
+            response = ResponseBase<OrderDTO>.Fail("Lo stato dell'ordine è già impostato su questo valore.", ErrorCode.ValidationError);
+        }
+        else if (order.IdStatus == 3 || order.IdStatus == 4)
+        {
+            response = ResponseBase<OrderDTO>.Fail("Lo stato di un ordine consegnato o annullato non può essere modificato.", ErrorCode.ValidationError);
+        }
+        else if ((order.IdStatus == 1 && newStatusId == 2) || (order.IdStatus == 2 && newStatusId == 3))
+        {
+            order.IdStatus = newStatusId;
+            var updatedOrder = await _repository.UpdateAsync(order);
+            response = ResponseBase<OrderDTO>.Success(_mapper.Map<OrderDTO>(updatedOrder));
+        }
+        else
+        {
+            response = ResponseBase<OrderDTO>.Fail("Transizione di stato non valida.", ErrorCode.ValidationError);
+        }
         return response;
     }
+
 
     // otteniamo tutti gli ordini con dettagli
     public async Task<ResponseBase<IEnumerable<OrderDTO>>> GetAllOrdersWithDetailsAsync()
@@ -195,78 +228,90 @@ public class OrderService : GenericService<Orders, OrderDTO>, IOrderService
         {
             response = ResponseBase<IEnumerable<OrderDTO>>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
         }
-
         return response;
     }
 
     // otteniamo tutti gli ordini di un utente specifico
-    public async Task<ResponseBase<IEnumerable<OrderDTO>>> GetOrdersByUserIdAsync(
-    int userId,
-    int callerUserId,
-    string role)
+    public async Task<ResponseBase<IEnumerable<OrderDTO>>> GetOrdersByUserIdAsync(int userId)
     {
         var response = new ResponseBase<IEnumerable<OrderDTO>>();
+        var callerId = _authorizationService.GetCurrentUserId();
+        var (hasPermission, ownOnly) = await _authorizationService.HasPermissionAsync(callerId, "CanAccessOrdersByUser");
 
-        try
+        if (!hasPermission)
         {
-            var hasAccess = await _authorizationService.CanAccessOrdersByUserAsync(userId, callerUserId, role);
-
-            if (!hasAccess)
-            {
-                response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Non sei autorizzato a visualizzare questi ordini.", ErrorCode.Unauthorized);
-            }
-            else
-            {
-                var orders = await _repository.GetOrdersByUserId(userId).ToListAsync();
-
-                if (orders == null || !orders.Any())
-                {
-                    response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Nessun ordine trovato per questo utente.", ErrorCode.NotFound);
-                }
-                else
-                {
-                    response = ResponseBase<IEnumerable<OrderDTO>>.Success(_mapper.Map<IEnumerable<OrderDTO>>(orders));
-                }
-            }
+            response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Non sei autorizzato a visualizzare questi ordini.", ErrorCode.Unauthorized);
         }
-        catch (Exception ex)
+        else if (ownOnly && userId != callerId)
         {
-            response = ResponseBase<IEnumerable<OrderDTO>>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
+            response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Non sei autorizzato a visualizzare gli ordini di altri utenti.", ErrorCode.Unauthorized);
         }
+        else
+        {
+            var orders = await _repository.GetOrdersByUserId(userId).ToListAsync();
+            response = ResponseBase<IEnumerable<OrderDTO>>.Success(_mapper.Map<IEnumerable<OrderDTO>>(orders ?? new List<Orders>()));
 
+        }
         return response;
     }
 
     // otteniamo un ordine specifico con dettagli
-    public async Task<ResponseBase<OrderDTO>> GetOrderByIdWithDetailsAsync(
-    int orderId,
-    int userId,
-    string role)
+    public async Task<ResponseBase<OrderDTO>> GetOrderByIdWithDetailsAsync(int orderId)
     {
         var response = new ResponseBase<OrderDTO>();
+        var userId = _authorizationService.GetCurrentUserId();
+        var (hasPermission, ownOnly) = await _authorizationService.HasPermissionAsync(userId, "CanAccessOrdersByUser");
 
-        try
+        if (!hasPermission)
         {
-            var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
-
-            if (order == null)
-            {
-                response = ResponseBase<OrderDTO>.Fail("Ordine non trovato.", ErrorCode.NotFound);
-            }
-            else if (!await _authorizationService.CanAccessOrderWithDetailsAsync(order, userId, role))
+            response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato a visualizzare questo ordine.", ErrorCode.Unauthorized);
+        }
+        else
+        {
+            if (ownOnly && !await _repository.IsOrderOwnedByUserAsync(orderId, userId))
             {
                 response = ResponseBase<OrderDTO>.Fail("Non sei autorizzato a visualizzare questo ordine.", ErrorCode.Unauthorized);
             }
             else
             {
-                response = ResponseBase<OrderDTO>.Success(_mapper.Map<OrderDTO>(order));
+                var order = await _repository.GetOrderByIdWithDetailsAsync(orderId);
+                if (order == null)
+                {
+                    response = ResponseBase<OrderDTO>.Fail("Ordine non trovato.", ErrorCode.NotFound);
+                }
+                else
+                {
+                    response = ResponseBase<OrderDTO>.Success(_mapper.Map<OrderDTO>(order));
+                }
             }
         }
-        catch (Exception ex)
-        {
-            response = ResponseBase<OrderDTO>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
-        }
-
         return response;
     }
+
+    public async Task<ResponseBase<IEnumerable<OrderDTO>>> GetOrdersBySupplierAsync()
+    {
+        var response = new ResponseBase<IEnumerable<OrderDTO>>();
+        var userId = _authorizationService.GetCurrentUserId();
+        var (hasPermission, _) = await _authorizationService.HasPermissionAsync(userId, "CanAccessOrdersByUser");
+
+        if (!hasPermission)
+        {
+            response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Non sei autorizzato a visualizzare gli ordini per i tuoi prodotti.", ErrorCode.Unauthorized);
+        }
+        else
+        {
+            var orders = await _repository.GetOrdersBySupplier(userId).ToListAsync();
+            if (orders == null || !orders.Any())
+            {
+                response = ResponseBase<IEnumerable<OrderDTO>>.Fail("Nessun ordine trovato per i tuoi prodotti.", ErrorCode.NotFound);
+            }
+            else
+            {
+                response = ResponseBase<IEnumerable<OrderDTO>>.Success(_mapper.Map<IEnumerable<OrderDTO>>(orders));
+            }
+        }
+        return response;
+    }
+
+
 }

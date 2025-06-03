@@ -3,6 +3,7 @@ using MyWarehouse.Common.DTOs;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
 using MyWarehouse.Interfaces.ServiceInterfaces;
+using MyWarehouse.Repositories;
 
 namespace MyWarehouse.Services;
 

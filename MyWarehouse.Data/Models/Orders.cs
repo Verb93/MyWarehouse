@@ -2,11 +2,13 @@
 
 public class Orders : BaseEntity
 {
-    public DateTime OrderDate { get; set; }
     public int IdUser { get; set; }
-    public required Users User { get; set; }
     public int IdStatus { get; set; }
-    public required StatusOrders Status {  get; set; }
+    public DateTime OrderDate { get; set; }
     public decimal TotalPrice { get; set; }
+    public int? IdAddress { get; set; }
+    public Addresses? Address { get; set; }
+    public Users User { get; set; }    
+    public StatusOrders Status {  get; set; }
     public ICollection<OrderDetails> OrderDetails { get; set; }
 }

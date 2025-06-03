@@ -13,9 +13,8 @@ public class Users : BaseEntity
     public bool IsDeleted { get; set; } = false;
 
     // Relazioni
-    public int IdRole { get; set; }
-    public required Roles Role { get; set; }
-
     public ICollection<Orders>? Orders { get; set; }
     public ICollection<SupplierUsers> SupplierUsers { get; set; }
+    public ICollection<UserRoles> UserRoles { get; set; }
+    public ICollection<Addresses> Addresses { get; set; }
 }

@@ -6,6 +6,10 @@ using MyWarehouse.Interfaces.SecurityInterface;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
 using Microsoft.EntityFrameworkCore;
+using MyWarehouse.Interfaces.ServiceInterfaces;
+using MyWarehouse.Common.Constants;
+using MyWarehouse.Common.Requests;
+using Microsoft.AspNetCore.Authorization;
 
 
 namespace MyWarehouse.Services.Security;
@@ -16,6 +20,7 @@ public class AuthService : IAuthService
     private readonly IPasswordService<Users> _passwordService;
     private readonly IJwtService _jwtService;
     private readonly ISupplierUserRepository _supplierUserRepository;
+    private readonly IRoleService _roleService;
     private readonly IMapper _mapper;
 
     public AuthService(
@@ -23,12 +28,14 @@ public class AuthService : IAuthService
         IPasswordService<Users> passwordService,
         IJwtService jwtService,
         ISupplierUserRepository supplierUserRepository,
+        IRoleService roleService,
         IMapper mapper)
     {
         _userRepository = userRepository;
         _passwordService = passwordService;
         _jwtService = jwtService;
         _supplierUserRepository = supplierUserRepository;
+        _roleService = roleService;
         _mapper = mapper;
     }
 
@@ -51,8 +58,11 @@ public class AuthService : IAuthService
             else
             {
                 var userDto = _mapper.Map<UserDTO>(user);
-                var rolePermissions = await _userRepository.GetPermissionsByRoleAsync(user.IdRole);
-                var token = _jwtService.GenerateJwtToken(userDto, rolePermissions);
+                var roleNames = user.UserRoles
+                    .Select(ur => ur.Role.Name)
+                    .ToList();
+                var token = _jwtService.GenerateJwtToken(userDto, roleNames);
+
                 response = ResponseBase<string>.Success(token);
             }
         }
@@ -70,31 +80,35 @@ public class AuthService : IAuthService
 
         try
         {
-            bool emailExists = await _userRepository.GetByEmailAsync(registerDTO.Email) != null;
-
-            if (string.IsNullOrEmpty(registerDTO.Password))
-            {
-                response = ResponseBase<UserDTO>.Fail("La password non può essere vuota", ErrorCode.ValidationError);
-            }
-            else if (emailExists)
+            // 1. Verifica se esiste un utente con la stessa email
+            var existingUser = await _userRepository.GetByEmailAsync(registerDTO.Email);
+            if (existingUser != null)
             {
                 response = ResponseBase<UserDTO>.Fail("Utente già esistente", ErrorCode.ValidationError);
             }
+            else if (string.IsNullOrWhiteSpace(registerDTO.Password))
+            {
+                response = ResponseBase<UserDTO>.Fail("La password non può essere vuota", ErrorCode.ValidationError);
+            }
             else
             {
+                // 2. Crea nuovo utente
                 var user = _mapper.Map<Users>(registerDTO);
                 user.PasswordHash = _passwordService.HashPassword(user, registerDTO.Password);
                 user.CreatedAt = DateTime.UtcNow;
                 user.IsDeleted = false;
-                user.IdRole = registerDTO.IdRole;
 
                 await _userRepository.AddAsync(user);
 
-                if (user.IdRole == 3 && registerDTO.IdSupplier.HasValue)
+                // 3. Assegna ruolo client
+                var publicRoles = await _roleService.GetPublicRolesAsync();
+                var client = publicRoles.FirstOrDefault(r => r.Name.Equals(RoleNames.Client, StringComparison.OrdinalIgnoreCase));
+                if (client != null)
                 {
-                    await _supplierUserRepository.AddSupplierUserAsync(user.Id, registerDTO.IdSupplier.Value);
+                    await _userRepository.AddUserRolesAsync(user.Id, new List<int> { client.Id });
                 }
 
+                // 4. Ritorna l'utente creato
                 var createdUser = await _userRepository.GetAllWithRoles()
                     .FirstOrDefaultAsync(u => u.Id == user.Id);
 

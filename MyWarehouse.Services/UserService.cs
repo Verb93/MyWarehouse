@@ -1,13 +1,14 @@
 ﻿using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using MyWarehouse.Common.Constants;
 using MyWarehouse.Common.DTOs.Users;
+using MyWarehouse.Common.Requests;
 using MyWarehouse.Common.Response;
 using MyWarehouse.Common.Security.SecurityInterface;
 using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
 using MyWarehouse.Interfaces.SecurityInterface;
 using MyWarehouse.Interfaces.ServiceInterfaces;
-using System.Security.Claims;
 
 namespace MyWarehouse.Services;
 
@@ -16,20 +17,24 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
     private readonly IMapper _mapper;
     private readonly IUserRepository _repository;
     private readonly IPasswordService<Users> _passwordService;
+    private readonly ISupplierUserRepository _supplierUserRepository;
     private readonly IAuthorizationService _authorizationService;
+    private readonly IRoleRepository _roleRepository;
+
     public UserService(
-        IUserRepository repository, 
-        IMapper mapper, 
+        IUserRepository repository,
+        IMapper mapper,
         IPasswordService<Users> passwordService,
         ISupplierUserRepository supplierUserRepository,
-        IJwtService jwtService,
-        IAuthorizationService authorizationService
-        ) : base(repository, mapper)
+        IAuthorizationService authorizationService,
+        IRoleRepository roleRepository) : base(repository, mapper)
     {
         _mapper = mapper;
         _repository = repository;
         _passwordService = passwordService;
+        _supplierUserRepository = supplierUserRepository;
         _authorizationService = authorizationService;
+        _roleRepository = roleRepository;
     }
 
     public async Task<ResponseBase<UserDTO>> GetUserByIdAsync(int userId)
@@ -38,9 +43,11 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
 
         try
         {
-            var hasAccess = await _authorizationService.CanAccessOwnResourceAsync<Users>(userId, u => u.Id);
+            var (hasPermission, ownOnly) = await _authorizationService.HasPermissionAsync(userId, "CanViewUser");
+            var currentUserId = _authorizationService.GetCurrentUserId();
+            var (hasGlobalPermission, _) = await _authorizationService.HasPermissionAsync(userId, "CanViewAllUsers");
 
-            if (!hasAccess)
+            if (!hasPermission && !hasGlobalPermission)
             {
                 response = ResponseBase<UserDTO>.Fail("Non sei autorizzato a visualizzare questo utente.", ErrorCode.Unauthorized);
             }
@@ -50,6 +57,10 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
                 if (user == null || user.IsDeleted)
                 {
                     response = ResponseBase<UserDTO>.Fail("Utente non trovato.", ErrorCode.NotFound);
+                }
+                else if (hasPermission && ownOnly && user.Id != currentUserId)
+                {
+                    response = ResponseBase<UserDTO>.Fail("Non sei autorizzato a visualizzare questo utente.", ErrorCode.Unauthorized);
                 }
                 else
                 {
@@ -71,26 +82,27 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
         return _mapper.Map<IEnumerable<UserDTO>>(users);
     }
 
-    //non elimina completamente l'utante, così da non dover cambiare le altre tabelle associate
-    //quindi viene marcato come eliminato
-    public async Task<ResponseBase<bool>> DeleteUserAsync(ClaimsPrincipal currentUser, int userId)
+    public async Task<ResponseBase<bool>> DeleteUserAsync(int userId)
     {
         var response = new ResponseBase<bool>();
 
         try
         {
             var user = await _repository.GetByIdAsync(userId);
-            if (user == null)
+            if (user == null || user.IsDeleted)
             {
-                response = ResponseBase<bool>.Fail("Utente non trovato", ErrorCode.NotFound);
+                response = ResponseBase<bool>.Fail("Utente non trovato.", ErrorCode.NotFound);
             }
             else
             {
-                // Verifica se l'utente è Admin o sta eliminando sé stesso
-                var isAdmin = currentUser.IsInRole("Admin");
-                var hasAccess = await _authorizationService.CanAccessOwnResourceAsync<Users>(currentUser, userId, u => u.Id);
+                var (hasPermission, ownOnly) = await _authorizationService.HasPermissionAsync(userId, "CanDeleteUser");
+                var currentUserId = _authorizationService.GetCurrentUserId();
 
-                if (!isAdmin && !hasAccess)
+                if (!hasPermission)
+                {
+                    response = ResponseBase<bool>.Fail("Non sei autorizzato a eliminare questo utente.", ErrorCode.Unauthorized);
+                }
+                else if (ownOnly && user.Id != currentUserId)
                 {
                     response = ResponseBase<bool>.Fail("Non sei autorizzato a eliminare questo utente.", ErrorCode.Unauthorized);
                 }
@@ -110,7 +122,7 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
         return response;
     }
 
-    public async Task<ResponseBase<UserDTO>> UpdateUserAsync(ClaimsPrincipal currentUser, UserDTO userDto)
+    public async Task<ResponseBase<UserDTO>> UpdateUserAsync(UserDTO userDto)
     {
         var response = new ResponseBase<UserDTO>();
 
@@ -119,13 +131,18 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
             var user = await _repository.GetByIdAsync(userDto.Id);
             if (user == null || user.IsDeleted)
             {
-                response = ResponseBase<UserDTO>.Fail("Utente non trovato", ErrorCode.NotFound);
+                response = ResponseBase<UserDTO>.Fail("Utente non trovato.", ErrorCode.NotFound);
             }
             else
             {
-                var hasAccess = await _authorizationService.CanAccessOwnResourceAsync<Users>(currentUser, userDto.Id, u => u.Id);
+                var (hasPermission, ownOnly) = await _authorizationService.HasPermissionAsync(userDto.Id, "CanUpdateUser");
+                var currentUserId = _authorizationService.GetCurrentUserId();
 
-                if (!hasAccess)
+                if (!hasPermission)
+                {
+                    response = ResponseBase<UserDTO>.Fail("Non sei autorizzato a modificare questo utente.", ErrorCode.Unauthorized);
+                }
+                else if ((ownOnly && user.Id != currentUserId))
                 {
                     response = ResponseBase<UserDTO>.Fail("Non sei autorizzato a modificare questo utente.", ErrorCode.Unauthorized);
                 }
@@ -137,15 +154,13 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
 
                     if (user.Email != userDto.Email)
                     {
-                        bool emailExists = await _repository.GetByEmailAsync(userDto.Email) != null;
-                        if (emailExists)
+                        var existingUser = await _repository.GetByEmailAsync(userDto.Email);
+                        if (existingUser != null)
                         {
-                            response = ResponseBase<UserDTO>.Fail("Email già in uso", ErrorCode.ValidationError);
+                            response = ResponseBase<UserDTO>.Fail("Email già in uso.", ErrorCode.ValidationError);
+                            return response;
                         }
-                        else
-                        {
-                            user.Email = userDto.Email;
-                        }
+                        user.Email = userDto.Email;
                     }
 
                     var updatedUser = await _repository.UpdateAsync(user);
@@ -161,7 +176,33 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
         return response;
     }
 
-    public async Task<ResponseBase<bool>> ChangePasswordAsync(ClaimsPrincipal currentUser, int userId, ChangePasswordDTO changePasswordDto)
+    public async Task<ResponseBase<UserDTO>> GetCurrentUserAsync()
+    {
+        var response = new ResponseBase<UserDTO>();
+
+        try
+        {
+            var userId = _authorizationService.GetCurrentUserId();
+            var user = await _repository.GetByIdWithRoleAsync(userId);
+
+            if (user == null || user.IsDeleted)
+            {
+                response = ResponseBase<UserDTO>.Fail("Utente non trovato.", ErrorCode.NotFound);
+            }
+            else
+            {
+                response = ResponseBase<UserDTO>.Success(_mapper.Map<UserDTO>(user));
+            }
+        }
+        catch (Exception ex)
+        {
+            response = ResponseBase<UserDTO>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
+        }
+
+        return response;
+    }
+
+    public async Task<ResponseBase<bool>> ChangePasswordAsync(int userId, ChangePasswordRequest changePassword)
     {
         var response = new ResponseBase<bool>();
 
@@ -170,27 +211,32 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
             var user = await _repository.GetByIdAsync(userId);
             if (user == null || user.IsDeleted)
             {
-                response = ResponseBase<bool>.Fail("Utente non trovato", ErrorCode.NotFound);
+                response = ResponseBase<bool>.Fail("Utente non trovato.", ErrorCode.NotFound);
             }
             else
             {
-                var hasAccess = await _authorizationService.CanAccessOwnResourceAsync<Users>(currentUser, userId, u => u.Id);
+                var (hasPermission, ownOnly) = await _authorizationService.HasPermissionAsync(userId, "CanChangePassword");
+                var currentUserId = _authorizationService.GetCurrentUserId();
 
-                if (!hasAccess)
+                if (!hasPermission)
                 {
                     response = ResponseBase<bool>.Fail("Non sei autorizzato a modificare la password di questo utente.", ErrorCode.Unauthorized);
                 }
-                else if (!_passwordService.VerifyPassword(user, user.PasswordHash, changePasswordDto.OldPassword))
+                else if (ownOnly && user.Id != currentUserId)
                 {
-                    response = ResponseBase<bool>.Fail("La password attuale non è corretta", ErrorCode.ValidationError);
+                    response = ResponseBase<bool>.Fail("Non sei autorizzato a modificare la password di questo utente.", ErrorCode.Unauthorized);
                 }
-                else if (string.IsNullOrWhiteSpace(changePasswordDto.NewPassword))
+                else if (!_passwordService.VerifyPassword(user, user.PasswordHash, changePassword.OldPassword))
                 {
-                    response = ResponseBase<bool>.Fail("La nuova password non può essere vuota", ErrorCode.ValidationError);
+                    response = ResponseBase<bool>.Fail("La password attuale non è corretta.", ErrorCode.ValidationError);
+                }
+                else if (string.IsNullOrWhiteSpace(changePassword.NewPassword))
+                {
+                    response = ResponseBase<bool>.Fail("La nuova password non può essere vuota.", ErrorCode.ValidationError);
                 }
                 else
                 {
-                    user.PasswordHash = _passwordService.HashPassword(user, changePasswordDto.NewPassword);
+                    user.PasswordHash = _passwordService.HashPassword(user, changePassword.NewPassword);
                     await _repository.UpdateAsync(user);
                     response = ResponseBase<bool>.Success(true);
                 }
@@ -203,4 +249,141 @@ public class UserService : GenericService<Users, UserDTO>, IUserService
 
         return response;
     }
+
+    public async Task<ResponseBase<bool>> UpdateUserRolesAsync(int userId, UpdateRolesRequest request)
+    {
+        var response = new ResponseBase<bool>();
+
+        try
+        {
+            // 1. Recupera l'utente
+            var user = await _repository.GetByIdAsync(userId);
+            if (user == null || user.IsDeleted)
+            {
+                response = ResponseBase<bool>.Fail("Utente non trovato.", ErrorCode.NotFound);
+            }
+            else
+            {
+                // 2. Ottiene i ruoli attuali
+                var currentRoles = await _repository.GetUserRoleNamesAsync(userId);
+
+                // 3. Blocco protezione admin
+                if (currentRoles.Contains(RoleNames.Admin))
+                {
+                    response = ResponseBase<bool>.Fail("Non puoi modificare un utente admin.", ErrorCode.Unauthorized);
+                }
+                else
+                {
+                    // 4. Rimozione ruoli esistenti
+                    await _repository.RemoveAllUserRolesAsync(userId);
+
+                    // 5. Prepara i nuovi ruoli
+                    var incomingRoles = request.Roles
+                        .Where(r => r != RoleNames.Admin)
+                        .Distinct()
+                        .ToList();
+
+                    if (!incomingRoles.Contains(RoleNames.Client))
+                        incomingRoles.Add(RoleNames.Client);
+
+                    // 6. Assegna i nuovi ruoli
+                    var roleIds = await _roleRepository.GetRoleIdsByNamesAsync(incomingRoles);
+                    await _repository.AddUserRolesAsync(userId, roleIds);
+
+                    // 7. Rimozione precedente associazione fornitore (se esistente)
+                    await _supplierUserRepository.RemoveAllSupplierUsersByUserIdAsync(userId);
+
+                    // 8. Se il nuovo ruolo include usersupplier, assegna il fornitore
+                    if (incomingRoles.Contains(RoleNames.UserSupplier))
+                    {
+                        if (request.IdSupplier == null)
+                        {
+                            response = ResponseBase<bool>.Fail("ID fornitore richiesto per assegnare usersupplier.", ErrorCode.ValidationError);
+                            return response;
+                        }
+
+                        await _supplierUserRepository.AddSupplierUserAsync(userId, request.IdSupplier.Value);
+                    }
+
+                    // 9. Successo
+                    response = ResponseBase<bool>.Success(true);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            response = ResponseBase<bool>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
+        }
+
+        return response;
+    }
+
+    public async Task<ResponseBase<bool>> UpgradeToBusinessAsync(UpgradeToBusinessRequest request)
+    {
+        var response = new ResponseBase<bool>();
+
+        try
+        {
+            var userId = _authorizationService.GetCurrentUserId(); // ✅ recupero centralizzato
+
+            var user = await _repository.GetByIdWithRoleAsync(userId);
+            if (user == null || user.IsDeleted)
+            {
+                response = ResponseBase<bool>.Fail("Utente non trovato.", ErrorCode.NotFound);
+            }
+            else
+            {
+                var roleNames = await _repository.GetUserRoleNamesAsync(userId);
+
+                // 1. Aggiungi ruolo usersupplier se non presente
+                if (!roleNames.Contains(RoleNames.UserSupplier))
+                {
+                    var publicRoles = await _roleRepository.GetPublicRolesAsync();
+                    var userSupplierRole = publicRoles.FirstOrDefault(r => r.Name == RoleNames.UserSupplier);
+
+                    if (userSupplierRole == null)
+                    {
+                        response = ResponseBase<bool>.Fail("Ruolo usersupplier non disponibile.", ErrorCode.ValidationError);
+                    }
+                    else
+                    {
+                        await _repository.AddUserRolesAsync(userId, new List<int> { userSupplierRole.Id });
+
+                        foreach (var supplierId in request.IdSuppliers.Distinct())
+                        {
+                            var exists = await _supplierUserRepository.ExistsAsync(userId, supplierId);
+                            if (!exists)
+                            {
+                                await _supplierUserRepository.AddSupplierUserAsync(userId, supplierId);
+                            }
+                        }
+
+                        response = ResponseBase<bool>.Success(true);
+                    }
+                }
+                else
+                {
+                    // 2. Già usersupplier: aggiungi solo i fornitori
+                    foreach (var supplierId in request.IdSuppliers.Distinct())
+                    {
+                        var exists = await _supplierUserRepository.ExistsAsync(userId, supplierId);
+                        if (!exists)
+                        {
+                            await _supplierUserRepository.AddSupplierUserAsync(userId, supplierId);
+                        }
+                    }
+
+                    response = ResponseBase<bool>.Success(true);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            response = ResponseBase<bool>.Fail($"Errore interno: {ex.Message}", ErrorCode.ServiceUnavailable);
+        }
+
+        return response;
+    }
+
+
 }

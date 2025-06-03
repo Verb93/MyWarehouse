@@ -5,5 +5,5 @@ namespace MyWarehouse.Common.Security.SecurityInterface;
 
 public interface IJwtService
 {
-    string GenerateJwtToken(UserDTO userDTO, List<RolePermissions> permissions);
+    string GenerateJwtToken(UserDTO userDTO, List<string> roleNames);
 }

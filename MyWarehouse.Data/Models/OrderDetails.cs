@@ -1,6 +1,6 @@
 ﻿namespace MyWarehouse.Data.Models;
 
-public class OrderDetails
+public class OrderDetails : BaseEntity
 {
     public int IdOrder { get; set; }
     public Orders Order { get; set; }

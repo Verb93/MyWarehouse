@@ -1,10 +1,8 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 
 namespace MyWarehouse.WEB.Controllers;
 
-[Authorize]
 [Route("api/[controller]")]
 [ApiController]
 public class CityController : ControllerBase

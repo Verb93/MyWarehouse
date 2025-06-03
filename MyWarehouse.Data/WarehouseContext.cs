@@ -19,6 +19,11 @@ public class WarehouseContext : DbContext
     public DbSet<SupplierUsers> SupplierUsers { get; set; }
     public DbSet<Permissions> Permissions { get; set; }
     public DbSet<RolePermissions> RolePermissions { get; set; }
+    public DbSet<UserRoles> UserRoles { get; set; }
+    public DbSet<Carts> Carts { get; set; }
+    public DbSet<CartItems> CartItems { get; set; }
+    public DbSet<Addresses> Addresses { get; set; }
+
 
 
     public WarehouseContext(DbContextOptions<WarehouseContext> options)
@@ -62,6 +67,10 @@ public class WarehouseContext : DbContext
                 .WithMany(s => s.Orders)
                 .HasForeignKey(o => o.IdStatus);
 
+            entity.HasOne(o => o.Address)
+                  .WithMany()
+                  .HasForeignKey(o => o.IdAddress);
+
             entity.Property(p => p.OrderDate)
                 .HasDefaultValueSql("GETDATE()");
             
@@ -80,20 +89,14 @@ public class WarehouseContext : DbContext
             entity.HasMany(o => o.Orders)
                 .WithOne(s => s.Status)
                 .HasForeignKey(o => o.IdStatus);
-
-            entity.HasData(
-                new StatusOrders { Id = 1, Description = "In Lavorazione"},
-                new StatusOrders { Id = 2, Description = "Spedito" },
-                new StatusOrders { Id = 3, Description = "Consegnato" },
-                new StatusOrders { Id = 4, Description = "Annullato" }
-                );
         });
         #endregion
 
         #region ORDERDETAILS
         modelBuilder.Entity<OrderDetails>(entity =>
         {
-            entity.HasKey(od => new { od.IdOrder, od.IdProduct });
+            entity.Property(od => od.Id)
+                .HasColumnName("IdOrderDetail");
 
             entity.HasOne(od => od.Order)
                 .WithMany(o => o.OrderDetails)
@@ -135,16 +138,14 @@ public class WarehouseContext : DbContext
             entity.Property(e => e.IsDeleted)
                 .HasDefaultValue(false);
 
-            entity.HasOne(u => u.Role)
-                .WithMany(r => r.Users)
-                .HasForeignKey(u => u.IdRole);
         });
         #endregion
 
         #region SUPPLIERUSERS
         modelBuilder.Entity<SupplierUsers>(entity =>
         {
-            entity.HasKey(su => new { su.IdSupplier, su.IdUser });
+            entity.HasKey(su => 
+                new { su.IdSupplier, su.IdUser });
 
             entity.HasOne(su => su.Supplier)
                 .WithMany(s => s.SupplierUsers)
@@ -177,12 +178,22 @@ public class WarehouseContext : DbContext
         {
             entity.Property(e => e.Id)
                 .HasColumnName("IdRole");
+        });
+        #endregion
 
-            entity.HasData(
-                new Roles { Id = 1, Name = "admin" },
-                new Roles { Id = 2, Name = "client" },
-                new Roles { Id = 3, Name = "usersupplier" }
-            );
+        #region USERROLES
+        modelBuilder.Entity<UserRoles>(entity =>
+        {
+            entity.HasKey(ur => 
+                new { ur.IdUser, ur.IdRole});
+
+            entity.HasOne(u => u.User)
+                .WithMany(ur => ur.UserRoles)
+                .HasForeignKey(ui => ui.IdUser);
+
+            entity.HasOne(r => r.Role)
+                .WithMany(ur => ur.UserRoles)
+                .HasForeignKey(ri => ri.IdRole);
         });
         #endregion
 
@@ -191,6 +202,7 @@ public class WarehouseContext : DbContext
         {
             entity.Property(p => p.Id)
                   .HasColumnName("IdPermission");
+
         });
         #endregion
 
@@ -213,7 +225,42 @@ public class WarehouseContext : DbContext
         });
         #endregion
 
-    }
+        #region CARTS
+        modelBuilder.Entity<Carts>(entity =>
+        {
+            entity.HasOne(c => c.User)
+                .WithOne()
+                .HasForeignKey<Carts>(c => c.IdUser);
+        });
 
+        modelBuilder.Entity<CartItems>(entity =>
+        {
+            entity.HasOne(ci => ci.Cart)
+                .WithMany(c => c.Items)
+                .HasForeignKey(ci => ci.IdCart);
+
+            entity.HasOne(ci => ci.Product)
+                .WithMany()
+                .HasForeignKey(ci => ci.IdProduct);
+        });
+        #endregion
+
+        #region ADDRESSES
+        modelBuilder.Entity<Addresses>(entity =>
+        {
+            entity.HasOne(a => a.User)
+                .WithMany(u => u.Addresses)
+                .HasForeignKey(a => a.IdUser);
+
+            entity.HasOne(a => a.City)
+                .WithMany()
+                .HasForeignKey(a => a.IdCity);
+
+            entity.Property(a => a.IsDeleted)
+                .HasDefaultValue(false);
+
+        });
+        #endregion
+    }
 }
 

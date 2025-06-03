@@ -1,6 +1,8 @@
 ﻿using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using MyWarehouse.Common.DTOs;
 using MyWarehouse.Common.Response;
+using MyWarehouse.Data.Models;
 using MyWarehouse.Interfaces.RepositoryInterfaces;
 using MyWarehouse.Interfaces.ServiceInterfaces;
 
@@ -8,8 +10,8 @@ namespace MyWarehouse.Services;
 
 
 public abstract class GenericService<TEntity, TDTO> : IGenericService<TDTO>
-    where TEntity : class
-    where TDTO : class
+    where TEntity : BaseEntity
+    where TDTO : BaseEntityDTO
 {
     private readonly IGenericRepository<TEntity> _repository;
     private readonly IMapper _mapper;

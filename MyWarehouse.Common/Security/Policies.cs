@@ -34,5 +34,4 @@ public static class Policies
         return new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireRole(Client, Supplier).Build(); 
     }
 
-
 }

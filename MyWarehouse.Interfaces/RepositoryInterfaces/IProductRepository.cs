@@ -10,4 +10,6 @@ public interface IProductRepository : IGenericRepository<Products>
     IQueryable<Products> GetBySupplier(int supplierId);
     IQueryable<Products> GetAllWithDetails();
     Task<Products?> GetByIdWithDetailsAsync(int id);
+    Task<bool> IsProductOwnedByUserAsync(int productId, int userId);
+    IQueryable<Products> GetOwnedProductsByUser(int userId);
 }

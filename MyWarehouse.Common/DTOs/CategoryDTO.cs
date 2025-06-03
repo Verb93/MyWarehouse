@@ -1,7 +1,6 @@
 ﻿namespace MyWarehouse.Common.DTOs;
 
-public class CategoryDTO
+public class CategoryDTO : BaseEntityDTO
 {
-    public int Id { get; set; }
     public required string Name { get; set; }
 }

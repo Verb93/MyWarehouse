@@ -1,10 +1,8 @@
 ﻿namespace MyWarehouse.Common.DTOs;
 
-public class SupplierDTO
+public class SupplierDTO : BaseEntityDTO
 {
-    public int Id { get; set; }
-    public required string Name { get; set; }
     public int IdCity { get; set; }
-    public string CityName { get; set; }
+    public required string Name { get; set; }
+    public string? CityName { get; set; }
 }
-

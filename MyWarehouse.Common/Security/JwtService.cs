@@ -18,22 +18,20 @@ public class JwtService : IJwtService
         _jwtSetting = jwtOptions.Value;
     }
 
-    public string GenerateJwtToken(UserDTO userDTO, List<RolePermissions> permissions)
+    public string GenerateJwtToken(UserDTO userDTO, List<string> roleNames)
     {
         var key = Encoding.ASCII.GetBytes(_jwtSetting.Key);
 
         var claims = new List<Claim>
+    {
+        new Claim(ClaimTypes.NameIdentifier, userDTO.Id.ToString()),
+        new Claim(ClaimTypes.Name, userDTO.Email)
+    };
+
+        foreach (var role in roleNames)
         {
-            new Claim(ClaimTypes.NameIdentifier, userDTO.Id.ToString()),
-            new Claim(ClaimTypes.Name, userDTO.Email),
-            new Claim(ClaimTypes.Role, userDTO.RoleName ?? "User")
-        };
-
-        var permissionClaims = permissions.Select(p =>
-        new Claim("Permission", $"{p.Permission.HttpVerb}:{p.Permission.Endpoint}:{(p.OwnOnly ? "1" : "0")}")
-        );
-        claims.AddRange(permissionClaims);
-
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),

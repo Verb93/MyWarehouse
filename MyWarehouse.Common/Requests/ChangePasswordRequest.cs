@@ -1,7 +1,8 @@
-﻿namespace MyWarehouse.Common.DTOs.Users;
+﻿namespace MyWarehouse.Common.Requests;
 
-public class ChangePasswordDTO
+public class ChangePasswordRequest
 {
     public required string OldPassword { get; set; }
     public required string NewPassword { get; set; }
 }
+
